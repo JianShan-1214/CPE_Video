@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-14
 **Project:** CPE_Video — Remotion C++ Tutorial Video Generator
-**Status:** Approved
+**Status:** Implemented
 
 ---
 
@@ -27,13 +27,15 @@ Add AI-generated voice narration to each video step using `edge-tts` (Microsoft 
 ```
 npm run gen-audio <folder> [--force] [--step N]
   ├─ reads public/<folder>/config.json
-  ├─ for each step: calls edge-tts CLI → public/<folder>/audio/step_01.mp3
+  ├─ for each step with non-empty subtitle:
+  │    calls edge-tts CLI → public/<folder>/audio/step_01.mp3
   └─ skips existing files unless --force
 
 npm run render <folder>
   ├─ calculateMetadata: reads audio duration for each step
   ├─ stepDuration = max(configDuration, audioDuration)
-  └─ Series.Sequence → CodeStep → <Audio src=... startFrom={0} />
+  ├─ totalFrames = sum of all resolved step durations (after audio extension)
+  └─ Series.Sequence → CodeStep → <AudioPlayer src=... />
 ```
 
 ---
@@ -43,9 +45,9 @@ npm run render <folder>
 | File | Change |
 |------|--------|
 | `scripts/gen-audio.mjs` | **New** — TTS generation script |
-| `package.json` | Add `"gen-audio": "node scripts/gen-audio.mjs"` |
-| `src/calculate-metadata/calculate-metadata.tsx` | Read audio duration, adjust stepDuration |
-| `src/Main.tsx` | Add `audioSrc?: string` to `StepProps`; pass to CodeStep |
+| `package.json` | Add `"gen-audio": "node scripts/gen-audio.mjs"`; add `@remotion/media-utils` |
+| `src/calculate-metadata/calculate-metadata.tsx` | Read audio duration, adjust stepDuration, recompute totalFrames after resolution |
+| `src/Main.tsx` | Add `audioSrc: string \| undefined` to `StepProps`; render `<AudioPlayer>` in `CodeStep` |
 | `src/AudioPlayer.tsx` | **New** — thin wrapper around Remotion `<Audio />` |
 
 ---
@@ -58,57 +60,90 @@ npm run render <folder>
 ```bash
 npm run gen-audio bubble_sort               # generate missing steps only
 npm run gen-audio bubble_sort --force       # regenerate all steps
-npm run gen-audio bubble_sort --step 3     # regenerate step 3 only
+npm run gen-audio bubble_sort --step 3      # regenerate step 3 only (1-indexed)
 ```
+
+**Error: missing `<folder>` argument**
+```
+Usage: npm run gen-audio <folder> [--force] [--step N]
+```
+Exits with code 1.
 
 **Behaviour:**
 1. Parse `process.argv` for folder, `--force`, `--step N`
-2. Read and parse `public/<folder>/config.json`
-3. Create `public/<folder>/audio/` directory if absent
-4. For each step (filtered by `--step` if provided):
-   - Determine output path: `public/<folder>/audio/step_NN.mp3` (zero-padded, 1-indexed)
-   - Skip if file exists and `--force` is not set
-   - Spawn `edge-tts --voice zh-TW-HsiaoChenNeural --text "<subtitle>" --write-media <path>`
-   - Log progress: `[1/12] step_01.mp3 ✓` or `[1/12] step_01.mp3 (skipped)`
-5. If `edge-tts` command not found, print:
+2. If folder not provided: print usage, exit 1
+3. Read and parse `public/<folder>/config.json`
+4. Create `public/<folder>/audio/` directory if it does not exist (`fs.mkdirSync(..., { recursive: true })`)
+5. For each step (filtered by `--step` if provided):
+   - If `subtitle` is falsy or `subtitle.trim() === ""`: skip (log `[N/M] step_NN.mp3 (skipped — no subtitle)`)
+   - Determine output path: `public/<folder>/audio/step_NN.mp3` (zero-padded to 2 digits, 1-indexed)
+   - Skip if file exists and `--force` is not set (log `[N/M] step_NN.mp3 (skipped — exists)`)
+   - Spawn: `edge-tts --voice zh-TW-HsiaoChenNeural --text "<subtitle>" --write-media <path>`
+   - Log: `[N/M] step_NN.mp3 ✓`
+6. If `edge-tts` command not found, print:
    ```
-   edge-tts not found. Install with:  pip install edge-tts
+   Error: edge-tts not found. Install with:
+     pip install edge-tts
    ```
-   and exit with code 1
+   Exits with code 1.
 
-**Audio file naming:** `step_01.mp3`, `step_02.mp3`, … (zero-padded to 2 digits)
+**Audio file naming:** `step_01.mp3` … `step_99.mp3` (2-digit zero-padded, maximum 99 steps per folder).
 
-**Voice:** `zh-TW-HsiaoChenNeural` (female, natural Mandarin zh-TW)
+**Voice:** `zh-TW-HsiaoChenNeural` (female, natural Mandarin zh-TW).
 
 ---
 
 ### 2. `calculateMetadata` — Duration Logic
 
+**Runtime context note:** Remotion's `calculateMetadata` runs inside a headless Chromium browser (both in the Studio and during CLI render). This means browser APIs including `fetch` are available, and `getAudioDurationInSeconds` from `@remotion/media-utils` works correctly in this context.
+
+**Key fix — `totalFrames` must be computed after audio resolution,** not from the raw config step durations. The existing `totalFrames = stepDurations.reduce(...)` must be replaced with a sum over the resolved steps.
+
 ```ts
-import { getAudioDurationInSeconds, staticFile } from "remotion";
+import { getAudioDurationInSeconds } from "@remotion/media-utils";
+import { staticFile } from "remotion";
 
-// for each step i:
-const audioPath = `${folder}/audio/step_${String(i + 1).padStart(2, "0")}.mp3`;
-let audioDurationFrames = 0;
-try {
-  const secs = await getAudioDurationInSeconds(staticFile(audioPath));
-  audioDurationFrames = Math.ceil(secs * FPS);
-} catch {
-  // audio file does not exist — use config duration only
-}
+// Replace the pre-computed totalFrames with post-resolution sum.
+// Build resolvedSteps first (including audio-extended durations), then sum.
 
-const configFrames = Math.round((stepConfig.to - stepConfig.from) * FPS);
-const stepDuration = Math.max(configFrames, audioDurationFrames);
+const resolvedSteps = await Promise.all(stepConfigs.map(async (stepConfig, i) => {
+  const paddedIndex = String(i + 1).padStart(2, "0");
+  const audioSrc = staticFile(`${folder}/audio/step_${paddedIndex}.mp3`);
+
+  let stepDuration = Math.round((stepConfig.to - stepConfig.from) * FPS);
+  let resolvedAudioSrc: string | undefined = undefined;
+
+  try {
+    const secs = await getAudioDurationInSeconds(audioSrc);
+    resolvedAudioSrc = audioSrc;
+    stepDuration = Math.max(stepDuration, Math.ceil(secs * FPS));
+  } catch {
+    // Audio file does not exist — use config duration only
+  }
+
+  const rawLine = rawCodes[i].split("\n")[/* annotation targetLine - 1 */];
+  // ... existing annotation / highlight resolution unchanged ...
+
+  return {
+    code: highlightedSteps[i],
+    durationInFrames: stepDuration,
+    subtitle: stepConfig.subtitle,
+    highlight: resolveHighlight(stepConfig.highlight),
+    annotations: /* existing logic */,
+    audioSrc: resolvedAudioSrc,
+  };
+}));
+
+// totalFrames is now derived from audio-resolved durations:
+const totalFrames = resolvedSteps.reduce((a, s) => a + s.durationInFrames, 0);
 ```
 
-- `audioSrc` is set to `staticFile(audioPath)` when the file exists, otherwise `undefined`
-- `audioSrc` is stored in `StepProps` and passed through to the component tree
+- `resolvedAudioSrc` is `undefined` when no audio file exists for a step
+- Steps with no audio continue to use the config `from`/`to` duration unchanged
 
 ---
 
 ### 3. `src/AudioPlayer.tsx` (new)
-
-A minimal component that renders Remotion's `<Audio />` only when an `audioSrc` is provided:
 
 ```tsx
 import { Audio } from "remotion";
@@ -118,23 +153,35 @@ export const AudioPlayer: React.FC<{ src: string }> = ({ src }) => (
 );
 ```
 
-Kept as a separate file so it can be conditionally imported and easily mocked in tests.
+`startFrom={0}` means "start from frame 0 of this audio file". This works correctly because `AudioPlayer` is always rendered inside a `Series.Sequence` — Remotion automatically scopes the audio playback to that sequence's time range.
 
 ---
 
 ### 4. `src/Main.tsx` — `StepProps` and `CodeStep`
 
-Add to `StepProps`:
+**Updated `StepProps`:**
 ```ts
-audioSrc?: string;
+export type StepProps = {
+  code: HighlightedCode;
+  durationInFrames: number;
+  subtitle: string;
+  highlight: HighlightConfig;
+  annotations: AnnotationCallout[];
+  audioSrc: string | undefined;   // ← new
+};
 ```
 
-Inside `CodeStep` render:
+**Updated `CodeStep` JSX** (inside the returned JSX, alongside `<CodeTransition>`):
 ```tsx
-{step.audioSrc && <AudioPlayer src={step.audioSrc} />}
+<div style={outerStyle}>
+  <div style={scrollWrapStyle}>
+    {/* ... existing HighlightOverlay, LineNumbers, FloatingAnnotation, CodeTransition ... */}
+  </div>
+  {step.audioSrc && <AudioPlayer src={step.audioSrc} />}
+</div>
 ```
 
-The `<Audio />` starts at frame 0 of each `Series.Sequence`, synchronised with the typewriter animation onset.
+`<AudioPlayer>` is placed inside the outer `<div>` of `CodeStep` (which is already inside `Series.Sequence`), ensuring audio is scoped to the step's duration.
 
 ---
 
@@ -142,16 +189,17 @@ The `<Audio />` starts at frame 0 of each `Series.Sequence`, synchronised with t
 
 | Scenario | Behaviour |
 |----------|-----------|
-| No audio file | Step uses `config.json` duration, no audio plays |
-| Audio shorter than config duration | Audio plays, silence fills remaining frames |
-| Audio longer than config duration | Step duration extended to `ceil(audioDuration × FPS)` |
+| No audio file | Step uses `config.json` duration; no audio plays |
+| Audio shorter than config duration | Audio plays; silence fills remaining frames |
+| Audio longer than config duration | Step duration extended to `ceil(audioDuration × FPS)`; `totalFrames` updated accordingly |
+| Subtitle empty / falsy | No mp3 generated; treated as "no audio file" at render time |
 
 ---
 
 ## Dependencies
 
-- **edge-tts** (Python): `pip install edge-tts`
-  No new npm packages required. Remotion's `getAudioDurationInSeconds` and `<Audio />` are already available in the existing `remotion` dependency.
+- **edge-tts** (Python, external): `pip install edge-tts`
+- **`@remotion/media-utils`** (npm): `npm install @remotion/media-utils` — add to `package.json`
 
 ---
 
@@ -159,10 +207,10 @@ The `<Audio />` starts at frame 0 of each `Series.Sequence`, synchronised with t
 
 ```
 1. Edit subtitles in public/<folder>/config.json
-2. npm run gen-audio <folder>          # produces mp3 files
-3. Preview audio files (play manually or in Remotion Studio)
-4. Adjust subtitle text if needed → repeat step 2 with --force
-5. npm run render <folder>             # final render with audio
+2. npm run gen-audio <folder>               # produce mp3 files
+3. Review audio (play manually or preview in Remotion Studio)
+4. Adjust subtitle text if needed → npm run gen-audio <folder> --force
+5. npm run render <folder>                  # final render with audio
 ```
 
 ---
@@ -171,5 +219,5 @@ The `<Audio />` starts at frame 0 of each `Series.Sequence`, synchronised with t
 
 - Custom voice selection per step (all steps use the same voice)
 - Background music or sound effects
-- Subtitle/caption rendering from audio (already handled by existing SubtitleBar)
-- Automatic subtitle sync to audio timing (subtitles follow step boundaries, not word-by-word)
+- Word-by-word subtitle sync to audio waveform
+- More than 99 steps per folder

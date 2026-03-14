@@ -1,5 +1,7 @@
 # Audio Narration Implementation Plan
 
+> **Status: IMPLEMENTED** — All tasks completed 2026-03-15. Commits: a4318c1, ff3e2ca, 0d3a2de, 374c995, 317c0d8, 94a8fb5
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add edge-tts AI voice narration to each video step, generated independently before rendering.
@@ -56,18 +58,17 @@ git commit -m "chore: add @remotion/media-utils and gen-audio script entry"
 
 This script reads `public/<folder>/config.json`, creates `public/<folder>/audio/`, and spawns `edge-tts` once per step.
 
-- [ ] **Step 1: Verify edge-tts is installed**
+- [ ] **Step 1: Verify uv is installed**
 
 ```bash
-edge-tts --version
+uv --version
 ```
 
-If not installed:
-```bash
-pip install edge-tts
-```
+If not installed: https://docs.astral.sh/uv/getting-started/installation/
 
 - [ ] **Step 2: Create the script**
+
+`uv run --with edge-tts edge-tts ...` 讓 uv 自動管理 edge-tts 的 Python 環境，無需手動 install。
 
 ```js
 #!/usr/bin/env node
@@ -89,10 +90,10 @@ if (!folder) {
   process.exit(1);
 }
 
-// ── Check edge-tts ─────────────────────────────────────────────────────────
-const check = spawnSync("edge-tts", ["--version"], { encoding: "utf8" });
+// ── Check uv ───────────────────────────────────────────────────────────────
+const check = spawnSync("uv", ["--version"], { encoding: "utf8" });
 if (check.error) {
-  console.error("Error: edge-tts not found. Install with:\n  pip install edge-tts");
+  console.error("Error: uv not found. Install from https://docs.astral.sh/uv/getting-started/installation/");
   process.exit(1);
 }
 
@@ -133,7 +134,7 @@ for (let i = 0; i < total; i++) {
 
   console.log(`${label} generating…`);
   execSync(
-    `edge-tts --voice zh-TW-HsiaoChenNeural --text "${subtitle.replace(/"/g, '\\"')}" --write-media "${outPath}"`,
+    `uv run --with edge-tts edge-tts --voice zh-TW-HsiaoChenNeural --text "${subtitle.replace(/"/g, '\\"')}" --write-media "${outPath}"`,
     { stdio: "inherit" },
   );
   console.log(`${label} ✓`);
