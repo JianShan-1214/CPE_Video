@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execSync, spawnSync } from "child_process";
+import { spawnSync } from "child_process";
 import { existsSync, mkdirSync, readFileSync } from "fs";
 import { join } from "path";
 
@@ -60,9 +60,14 @@ for (let i = 0; i < total; i++) {
   }
 
   console.log(`${label} generating…`);
-  execSync(
-    `uv run --with edge-tts edge-tts --voice zh-TW-HsiaoChenNeural --text "${subtitle.replace(/"/g, '\\"')}" --write-media "${outPath}"`,
+  const result = spawnSync(
+    "uv",
+    ["run", "--with", "edge-tts", "edge-tts", "--voice", "zh-TW-HsiaoChenNeural", "--text", subtitle, "--write-media", outPath],
     { stdio: "inherit" },
   );
+  if (result.status !== 0) {
+    console.error(`${label} failed`);
+    process.exit(1);
+  }
   console.log(`${label} ✓`);
 }
