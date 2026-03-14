@@ -30,6 +30,7 @@
   },
   "scripts": {
     "dev": "remotion studio",
+    "render": "node scripts/render.mjs",
     "build": "remotion bundle",
     "upgrade": "remotion upgrade",
     "lint": "tsc && eslint src"

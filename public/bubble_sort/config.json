@@ -1,0 +1,178 @@
+{
+  "steps": [
+    {
+      "label": "介紹氣泡排序法",
+      "from": 0,
+      "to": 6,
+      "file": "code01.cpp",
+      "subtitle": "今天我們來學習氣泡排序法（Bubble Sort）。它的原理是：反覆比較相鄰的兩個元素，如果順序不對就交換，讓較大的值慢慢往後移，就像氣泡浮出水面一樣。",
+      "highlight": {
+        "startLine": 1,
+        "endLine": 2,
+        "color": "blue"
+      }
+    },
+    {
+      "label": "引入標頭與命名空間",
+      "from": 6,
+      "to": 12,
+      "file": "code02.cpp",
+      "subtitle": "首先引入 iostream 頭文件，讓我們可以使用 cout 進行輸出。接著 using namespace std，這樣之後就不需要每次都加 std:: 前綴了。",
+      "highlight": {
+        "startLine": 3,
+        "endLine": 4,
+        "color": "blue"
+      }
+    },
+    {
+      "label": "宣告 bubbleSort 函式",
+      "from": 12,
+      "to": 18,
+      "file": "code03.cpp",
+      "subtitle": "宣告排序函式 bubbleSort，接收一個整數陣列 arr 以及元素個數 n 作為參數，它負責執行整個排序的邏輯。",
+      "highlight": {
+        "startLine": 6,
+        "endLine": 7,
+        "color": "lightblue"
+      }
+    },
+    {
+      "label": "外層 for 迴圈（n-1 輪）",
+      "from": 18,
+      "to": 24,
+      "file": "code04.cpp",
+      "subtitle": "加入外層迴圈，i 從 0 跑到 n 減 2，總共執行 n 減 1 輪。每完成一輪，當前最大的元素就會移動到正確的位置。",
+      "highlight": {
+        "startLine": 7,
+        "endLine": 9,
+        "color": "yellow"
+      }
+    },
+    {
+      "label": "內層 for 迴圈（縮小範圍）",
+      "from": 24,
+      "to": 30,
+      "file": "code05.cpp",
+      "subtitle": "加入內層迴圈，j 從 0 跑到 n 減 i 減 2。為什麼要減 i？因為每輪結束後，末端已排好的元素不需要再比較了，範圍逐漸縮小。",
+      "highlight": {
+        "startLine": 8,
+        "endLine": 10,
+        "color": "yellow"
+      },
+      "annotations": [
+        {
+          "targetLine": 9,
+          "text": "每輪範圍逐漸縮小",
+          "startTime": 3.2,
+          "theme": "yellow"
+        }
+      ]
+    },
+    {
+      "label": "if 條件：前大於後則交換",
+      "from": 30,
+      "to": 36,
+      "file": "code06.cpp",
+      "subtitle": "這裡是核心判斷：如果 arr[j] 大於 arr[j+1]，也就是前面的元素比後面大，就需要交換這兩個元素的位置。",
+      "highlight": {
+        "startLine": 9,
+        "endLine": 11,
+        "color": "red"
+      }
+    },
+    {
+      "label": "temp 三步驟交換",
+      "from": 36,
+      "to": 42,
+      "file": "code07.cpp",
+      "subtitle": "執行交換時，需要一個暫時變數 temp。先把 arr[j] 暫存到 temp，再把 arr[j+1] 移到 arr[j]，最後把 temp 放回 arr[j+1]，完成交換。",
+      "highlight": {
+        "startLine": 10,
+        "endLine": 13,
+        "color": "green"
+      },
+      "annotations": [
+        {
+          "targetLine": 11,
+          "text": "暫存原始值",
+          "startTime": 3.2,
+          "theme": "green"
+        },
+        {
+          "targetLine": 13,
+          "text": "放回暫存值",
+          "startTime": 3.5,
+          "theme": "green"
+        }
+      ]
+    },
+    {
+      "label": "printArray 輸出函式",
+      "from": 42,
+      "to": 48,
+      "file": "code08.cpp",
+      "subtitle": "新增 printArray 輔助函式，用迴圈逐一輸出陣列的每個元素，加上空格分隔，最後換行。這樣我們就能清楚看到排序前後的結果。",
+      "highlight": {
+        "startLine": 18,
+        "endLine": 22,
+        "color": "lightblue"
+      }
+    },
+    {
+      "label": "建立測試陣列",
+      "from": 48,
+      "to": 54,
+      "file": "code09.cpp",
+      "subtitle": "在 main 函式裡建立測試用的整數陣列，包含 7 個未排序的數字：64、34、25、12、22、11、90，這就是我們要排序的資料。",
+      "highlight": {
+        "startLine": 24,
+        "endLine": 26,
+        "color": "yellow"
+      }
+    },
+    {
+      "label": "排序前印出陣列",
+      "from": 54,
+      "to": 60,
+      "file": "code10.cpp",
+      "subtitle": "呼叫 printArray 印出排序前的陣列，讓觀看者看清楚原本的順序是什麼樣子，等一下排序後就能直接比較差異。",
+      "highlight": {
+        "startLine": 28,
+        "endLine": 29,
+        "color": "blue"
+      }
+    },
+    {
+      "label": "呼叫 bubbleSort 執行排序",
+      "from": 60,
+      "to": 66,
+      "file": "code11.cpp",
+      "subtitle": "呼叫 bubbleSort 函式，傳入陣列 arr 和元素個數 n，開始執行排序。這一行是整個程式的核心呼叫。",
+      "highlight": {
+        "startLine": 31,
+        "endLine": 31,
+        "color": "green"
+      },
+      "annotations": [
+        {
+          "targetLine": 31,
+          "text": "啟動排序！",
+          "startTime": 3.2,
+          "theme": "green"
+        }
+      ]
+    },
+    {
+      "label": "印出排序後結果",
+      "from": 66,
+      "to": 72,
+      "file": "code12.cpp",
+      "subtitle": "排序完成後，再次呼叫 printArray 印出結果，你會看到數字已經從小到大整齊排列。這就是完整的氣泡排序法！",
+      "highlight": {
+        "startLine": 33,
+        "endLine": 34,
+        "color": "green"
+      }
+    }
+  ]
+}

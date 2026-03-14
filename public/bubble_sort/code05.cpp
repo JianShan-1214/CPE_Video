@@ -1,0 +1,12 @@
+// 氣泡排序法 (Bubble Sort)
+// 原理：反覆比較相鄰元素，將較大的值往後推
+#include <iostream>
+using namespace std;
+
+void bubbleSort(int arr[], int n) {
+	for (int i = 0; i < n - 1; i++) {
+		// 內層迴圈：每輪比較範圍逐漸縮小
+		for (int j = 0; j < n - i - 1; j++) {
+		}
+	}
+}

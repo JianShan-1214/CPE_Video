@@ -39,6 +39,7 @@ export type Props = {
   steps: StepProps[] | null;
   themeColors: ThemeColors | null;
   codeWidth: number | null;
+  folder: string;
 };
 
 // ─── 常數 ─────────────────────────────────────────────────────────────────────
@@ -164,7 +165,7 @@ const CodeStep: React.FC<{
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-export const Main: React.FC<Props> = ({ steps, themeColors, codeWidth }) => {
+export const Main: React.FC<Props> = ({ steps, themeColors, codeWidth, folder }) => {
   if (!steps) throw new Error("Steps are not defined");
   if (!themeColors) throw new Error("Theme colors are not defined");
   if (codeWidth == null) throw new Error("codeWidth is not defined");
@@ -194,7 +195,7 @@ export const Main: React.FC<Props> = ({ steps, themeColors, codeWidth }) => {
           height: CODE_SECTION_HEIGHT,
         }}
       >
-        <IDEFrame filename="bubble_sort.cpp">
+        <IDEFrame filename={`${folder}.cpp`}>
           <AbsoluteFill>
             <ProgressBar steps={steps} />
             <Series>

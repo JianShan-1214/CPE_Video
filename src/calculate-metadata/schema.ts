@@ -14,4 +14,6 @@ export const width = z.discriminatedUnion("type", [
 export const schema = z.object({
   theme: themeSchema,
   width,
+  /** public/ 底下的資料夾名稱，例如 "bubble_sort" */
+  folder: z.string(),
 });

@@ -15,16 +15,18 @@ const FPS = 30;
 export const calculateMetadata: CalculateMetadataFunction<
   Props & z.infer<typeof schema>
 > = async ({ props }) => {
-  // 讀取 config.json
-  const config = await getVideoConfig();
+  const folder = props.folder;
+
+  // 讀取 public/<folder>/config.json
+  const config = await getVideoConfig(folder);
   const { steps: stepConfigs } = config;
 
   await waitUntilDone();
 
-  // 載入各步驟的 cpp 原始碼
+  // 載入各步驟的 cpp 原始碼（從同一個 folder 讀取）
   const rawCodes: string[] = [];
   for (const stepConfig of stepConfigs) {
-    rawCodes.push(await getFileByName(stepConfig.file));
+    rawCodes.push(await getFileByName(folder, stepConfig.file));
   }
 
   // Syntax highlight
@@ -88,6 +90,7 @@ export const calculateMetadata: CalculateMetadataFunction<
     props: {
       theme: props.theme,
       width: props.width,
+      folder: props.folder,
       steps: resolvedSteps,
       themeColors,
       codeWidth,

@@ -109,29 +109,83 @@ npx remotion render src/index.ts Main out/Main.mp4  # 輸出影片
 
 ---
 
-## 準備程式碼檔案
+## 資料夾管理（多支影片）
 
-每個步驟對應一個 cpp 檔，放在 `public/` 資料夾。
-檔名自由命名，在 `config.json` 的 `"file"` 欄位填入即可。
+每支影片放在 `public/` 底下的獨立資料夾：
+
+```
+public/
+  bubble_sort/         ← 第一支影片
+    config.json
+    code01.cpp
+    code02.cpp
+    ...
+  merge_sort/          ← 第二支影片
+    config.json
+    code01.cpp
+    ...
+  linked_list/         ← 第三支影片
+    config.json
+    ...
+```
+
+`config.json` 的 `"file"` 欄位只填**檔名**，不需要加資料夾路徑。
+
+### 切換影片資料夾
+
+**方法 A：修改 `src/Root.tsx` 的 defaultProps**
+```tsx
+folder: "merge_sort",   // 改成你要的資料夾名稱
+```
+
+**方法 B：Render 時用 `--props` 指定（不用改程式碼）**
+```bash
+npx remotion render src/index.ts Main out/MergeSort.mp4 \
+  --props '{"folder":"merge_sort"}'
+```
+
+**方法 C：在 Remotion Studio GUI 直接修改 `folder` 欄位**
+```bash
+npm run dev   # 開啟後在左側 Props 欄找到 folder 修改
+```
+
+---
+
+## 新建一支影片
+
+1. 建立資料夾 `public/my_topic/`
+2. 在裡面建立 `config.json`（可複製 `bubble_sort/config.json` 作為模板）
+3. 準備各步驟的 cpp 檔，放在同一個資料夾
+4. Render：
+
+```bash
+npx remotion render src/index.ts Main out/MyTopic.mp4 \
+  --props '{"folder":"my_topic"}'
+```
+
+---
+
+## 程式碼檔案準備
+
+每個步驟對應一個 cpp 檔，放在影片資料夾裡。檔名自由命名。
 
 **慣例做法**（逐步新增程式碼）：
 
 ```
-public/
-  code01.cpp   ← 只有注解
-  code02.cpp   ← 加上 #include
-  code03.cpp   ← 再加上函式骨架
-  ...
-  code12.cpp   ← 完整程式
+code01.cpp   ← 只有注解
+code02.cpp   ← 加上 #include
+code03.cpp   ← 再加上函式骨架
+...
+code12.cpp   ← 完整程式
 ```
 
 每個步驟只新增 1–3 行，打字機效果會自動把**新增的部分**打出來。
 
 ---
 
-## 範例：新增一個步驟
+## 範例：在現有影片新增一個步驟
 
-1. 建立 `public/code13.cpp`（在上一個版本基礎上加新內容）
+1. 建立 `public/bubble_sort/code13.cpp`（在上一個版本基礎上加新內容）
 2. 在 `config.json` 的 `steps` 陣列末尾加入：
 
 ```jsonc
@@ -157,10 +211,11 @@ public/
 
 ```
 public/
-  config.json        ← 影片設定（你主要編輯這裡）
-  code01.cpp         ← 程式碼步驟檔案
-  code02.cpp
-  ...
+  bubble_sort/       ← 影片資料夾（可建立多個）
+    config.json      ← 影片設定（你主要編輯這裡）
+    code01.cpp       ← 程式碼步驟檔案
+    code02.cpp
+    ...
 
 src/
   config-types.ts    ← config.json 的 TypeScript 型別定義
