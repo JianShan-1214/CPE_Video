@@ -1,0 +1,86 @@
+{
+  "steps": [
+    {
+      "label": "題目說明 Dominos",
+      "from": 0,
+      "to": 6,
+      "file": "code01.cpp",
+      "subtitle": "骨牌排成長列，推倒一張會連鎖推倒下一張；給定用手推的骨牌，求總共會倒幾張。輸入為 n 張骨牌、m 條推倒關係、l 個手推編號，輸出為倒下的總數。",
+      "highlight": {
+        "startLine": 1,
+        "endLine": 17,
+        "color": "blue"
+      }
+    },
+    {
+      "label": "引入標頭與命名空間",
+      "from": 6,
+      "to": 12,
+      "file": "code02.cpp",
+      "subtitle": "引入 iostream、vector、stack，並使用 namespace std。我們用 adjacency list 存圖、用 stack 做迭代式 DFS。",
+      "highlight": {
+        "startLine": 19,
+        "endLine": 23,
+        "color": "blue"
+      }
+    },
+    {
+      "label": "DFS 函式（迭代式用 stack）",
+      "from": 12,
+      "to": 22,
+      "file": "code03.cpp",
+      "subtitle": "從 node 出發做 DFS：用 stack 模擬遞迴，未拜訪的點標記並累加 count，再把相鄰未拜訪的點壓進 stack，直到能連鎖推倒的骨牌都算完。",
+      "highlight": {
+        "startLine": 25,
+        "endLine": 41,
+        "color": "lightblue"
+      },
+      "annotations": [
+        {
+          "targetLine": 28,
+          "text": "用 stack 做迭代，避免遞迴爆棧",
+          "startTime": 3.2,
+          "theme": "yellow"
+        },
+        {
+          "targetLine": 31,
+          "text": "未拜訪才處理，避免重複計算",
+          "startTime": 4.0,
+          "theme": "green"
+        }
+      ]
+    },
+    {
+      "label": "main：讀取 n,m,l 與建圖",
+      "from": 22,
+      "to": 30,
+      "file": "code04.cpp",
+      "subtitle": "讀測資數 t，每筆讀 n、m、l。用 graph[n+1] 存相鄰串列、visited 記錄是否倒下。接著讀 m 條邊：x 倒會讓 y 倒，就 graph[x].push_back(y)。",
+      "highlight": {
+        "startLine": 43,
+        "endLine": 57,
+        "color": "yellow"
+      }
+    },
+    {
+      "label": "手推骨牌、呼叫 DFS、輸出",
+      "from": 30,
+      "to": 38,
+      "file": "code05.cpp",
+      "subtitle": "total 從 0 開始。對每個手推的骨牌 z，若尚未倒下就從 z 做 DFS，把連鎖倒下的數量累加到 total。最後輸出 total 即為答案。",
+      "highlight": {
+        "startLine": 59,
+        "endLine": 70,
+        "color": "green"
+      },
+      "annotations": [
+        {
+          "targetLine": 65,
+          "text": "只對未倒下的起點做 DFS，避免重複",
+          "startTime": 3.2,
+          "theme": "green"
+        }
+      ]
+    }
+  ]
+}

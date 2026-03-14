@@ -45,10 +45,11 @@ export const LineNumbers: React.FC<{
             key={i}
             style={{
               height: LINE_HEIGHT,
-              lineHeight: `${LINE_HEIGHT}px`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-end",
               fontSize: fontSize * 0.7,
               fontFamily: "JetBrains Mono, monospace",
-              textAlign: "right",
               paddingRight: 12,
               color: isHighlighted ? config.borderColor : "#4a5568",
               opacity: isHighlighted ? 0.4 + progress * 0.6 : 0.5,

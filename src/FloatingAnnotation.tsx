@@ -1,6 +1,6 @@
 import React from "react";
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
-import { fontSize, horizontalPadding, lineNumberGutterWidth, verticalPadding } from "./font";
+import { fontSize, verticalPadding } from "./font";
 import { LINE_HEIGHT } from "./HighlightOverlay";
 
 export interface AnnotationCallout {
@@ -21,15 +21,15 @@ const THEMES = {
   red:    { bg: "rgba(248,81,73,0.15)",   border: "#f85149", text: "#ff7b72" },
 };
 
-const LINE_GAP = 24;    // 程式碼右端到標注氣泡左邊的間距
-const LEAD_LENGTH = 60; // 引導線長度
+const LINE_GAP = 16;    // 程式碼右端到垂直指示條的間距
+const LEAD_LENGTH = 52; // 水平引導線長度
 
 export const FloatingAnnotation: React.FC<{
   callout: AnnotationCallout;
   stepDuration: number;
-  /** 程式碼內容最大寬度（px），用來定位標注氣泡 */
-  codeWidth: number;
-}> = ({ callout, stepDuration, codeWidth }) => {
+  /** 該行程式碼右端的 X 座標（px），由 calculateMetadata 計算後填入 */
+  lineEndX: number;
+}> = ({ callout, stepDuration, lineEndX }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
@@ -53,77 +53,79 @@ export const FloatingAnnotation: React.FC<{
 
   const opacity = pop * fadeOut;
   const scale  = interpolate(pop, [0, 1], [0.6, 1]);
-  // 從左側滑入（程式碼右邊往右彈出）
-  const slideX = interpolate(pop, [0, 1], [-12, 0]);
+  const slideX = interpolate(pop, [0, 1], [-16, 0]);
 
-  // Y 座標：目標行的垂直中心
+  // 目標行垂直中心
   const lineY = (callout.targetLine - 1) * LINE_HEIGHT + verticalPadding + LINE_HEIGHT / 2;
 
-  // X 座標：程式碼右端 + 引導線 + 間距
-  const annotationLeft =
-    horizontalPadding + lineNumberGutterWidth + codeWidth + LINE_GAP + LEAD_LENGTH;
+  // X 座標計算
+  const indicatorX  = lineEndX + LINE_GAP;         // 垂直指示條的起始 X
+  const guideStartX = indicatorX + 3;              // 水平引導線起始 X
+  const bubbleX     = guideStartX + LEAD_LENGTH;   // 氣泡左邊 X
 
   return (
-    <div
-      style={{
-        position: "absolute",
-        top: lineY,            // 目標行垂直中心
-        left: annotationLeft,
-        opacity,
-        // translateY(-50%) 讓容器自身高度不影響對齊，永遠置中於 lineY
-        transform: `translateY(-50%) translateX(${slideX}px) scale(${scale})`,
-        transformOrigin: "left center",
-        pointerEvents: "none",
-        zIndex: 20,
-      }}
-    >
-      {/* 引導線（從氣泡左側往左延伸至程式碼右端） */}
+    <>
+      {/* 垂直指示條：跨越整行高度，明確標示這是哪一行 */}
       <div
         style={{
           position: "absolute",
-          right: "100%",
-          top: "50%",
-          width: LEAD_LENGTH,
-          height: 1.5,
+          top: lineY - LINE_HEIGHT / 2,
+          left: indicatorX,
+          width: 3,
+          height: LINE_HEIGHT,
           backgroundColor: theme.border,
-          opacity: 0.7,
-          marginRight: 0,
-          transform: "translateY(-50%)",
+          opacity: opacity * 0.85,
+          borderRadius: 1.5,
+          pointerEvents: "none",
+          zIndex: 20,
         }}
       />
 
-      {/* 引導線起點的小圓點 */}
+      {/* 水平引導線：從垂直條中心往右延伸到氣泡 */}
       <div
         style={{
           position: "absolute",
-          right: `calc(100% + ${LEAD_LENGTH}px)`,
-          top: "50%",
-          width: 5,
-          height: 5,
-          borderRadius: "50%",
+          top: lineY - 0.75,
+          left: guideStartX,
+          width: LEAD_LENGTH,
+          height: 1.5,
           backgroundColor: theme.border,
-          opacity: 0.8,
-          transform: "translate(50%, -50%)",
+          opacity: opacity * 0.65,
+          pointerEvents: "none",
+          zIndex: 20,
         }}
       />
 
       {/* 標注氣泡 */}
       <div
         style={{
-          backgroundColor: theme.bg,
-          border: `1px solid ${theme.border}`,
-          borderRadius: 6,
-          padding: "7px 18px",
-          color: theme.text,
-          fontSize: fontSize * 0.95,
-          fontFamily: "-apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif",
-          whiteSpace: "nowrap",
-          boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
-          letterSpacing: "0.03em",
+          position: "absolute",
+          top: lineY,
+          left: bubbleX,
+          opacity,
+          transform: `translateY(-50%) translateX(${slideX}px) scale(${scale})`,
+          transformOrigin: "left center",
+          pointerEvents: "none",
+          zIndex: 20,
         }}
       >
-        {callout.text}
+        <div
+          style={{
+            backgroundColor: theme.bg,
+            border: `1px solid ${theme.border}`,
+            borderRadius: 6,
+            padding: "7px 18px",
+            color: theme.text,
+            fontSize: fontSize * 0.95,
+            fontFamily: "-apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif",
+            whiteSpace: "nowrap",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
+            letterSpacing: "0.03em",
+          }}
+        >
+          {callout.text}
+        </div>
       </div>
-    </div>
+    </>
   );
 };

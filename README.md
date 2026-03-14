@@ -16,16 +16,18 @@ npx remotion render src/index.ts Main out/Main.mp4  # 輸出影片
 
 ## 製作流程
 
+每支影片都有**自己的資料夾**，放在 `public/` 底下（不是直接放檔案在 public 根目錄）：
+
 ```
-1. 準備 cpp 檔  →  放到 public/
-2. 編輯設定檔   →  public/config.json
+1. 準備 cpp 檔  →  放到 public/<影片資料夾>/
+2. 編輯設定檔   →  public/<影片資料夾>/config.json
 3. 預覽         →  npm run dev
 4. 輸出         →  npx remotion render
 ```
 
 ---
 
-## 設定檔：`public/config.json`
+## 設定檔：`public/<影片資料夾>/config.json`
 
 所有步驟都在這一個檔案裡設定，不需要改任何程式碼。
 
@@ -39,7 +41,7 @@ npx remotion render src/index.ts Main out/Main.mp4  # 輸出影片
       "label":    "步驟名稱",      // 在 Remotion Studio 時間軸顯示
       "from":     0,               // 步驟開始（秒）
       "to":       6,               // 步驟結束（秒）—— 每步可以不同長度
-      "file":     "code01.cpp",    // public/ 資料夾內的程式碼檔名
+      "file":     "code01.cpp",    // 該影片資料夾內的程式碼檔名（不需路徑）
       "subtitle": "這裡是字幕文字，顯示在畫面下方。",
 
       // ── highlight 設定（必填）──────────────────────────
@@ -111,7 +113,7 @@ npx remotion render src/index.ts Main out/Main.mp4  # 輸出影片
 
 ## 資料夾管理（多支影片）
 
-每支影片放在 `public/` 底下的獨立資料夾：
+檔案**不會**直接放在 `public/` 根目錄，而是每支影片對應 `public/` 底下**一層**獨立資料夾：
 
 ```
 public/
@@ -153,7 +155,7 @@ npm run dev   # 開啟後在左側 Props 欄找到 folder 修改
 
 ## 新建一支影片
 
-1. 建立資料夾 `public/my_topic/`
+1. 在 `public/` 底下建立一層資料夾，例如 `public/my_topic/`
 2. 在裡面建立 `config.json`（可複製 `bubble_sort/config.json` 作為模板）
 3. 準備各步驟的 cpp 檔，放在同一個資料夾
 4. Render：
@@ -209,9 +211,11 @@ code12.cpp   ← 完整程式
 
 ## 專案結構
 
+程式碼與設定檔都在 **public 底下的「影片資料夾」** 內，不是直接放在 `public/` 根目錄：
+
 ```
 public/
-  bubble_sort/       ← 影片資料夾（可建立多個）
+  bubble_sort/       ← 影片資料夾（可建立多個，每支影片一層）
     config.json      ← 影片設定（你主要編輯這裡）
     code01.cpp       ← 程式碼步驟檔案
     code02.cpp

@@ -1,5 +1,5 @@
 import { HighlightedCode } from "codehike/code";
-import { useMemo } from "react";
+import React, { useMemo } from "react";
 import {
   AbsoluteFill,
   Easing,
@@ -10,9 +10,9 @@ import {
 } from "remotion";
 import { CodeTransition } from "./CodeTransition";
 import { FloatingAnnotation } from "./FloatingAnnotation";
+import { HighlightBox } from "./HighlightBox";
 import { HighlightOverlay } from "./HighlightOverlay";
 import { LineNumbers } from "./LineNumbers";
-import { ProgressBar } from "./ProgressBar";
 import { RefreshOnCodeChange } from "./ReloadOnCodeChange";
 import { ThemeColors, ThemeProvider } from "./calculate-metadata/theme";
 import { fontSize, horizontalPadding, lineNumberGutterWidth, verticalPadding } from "./font";
@@ -39,6 +39,7 @@ export type Props = {
   steps: StepProps[] | null;
   themeColors: ThemeColors | null;
   codeWidth: number | null;
+  charWidth: number | null;
   folder: string;
 };
 
@@ -67,8 +68,7 @@ const CodeStep: React.FC<{
   prevCode: HighlightedCode | null;
   scrollFrom: number;
   scrollTo: number;
-  codeWidth: number;
-}> = ({ step, prevCode, scrollFrom, scrollTo, codeWidth }) => {
+}> = ({ step, prevCode, scrollFrom, scrollTo }) => {
   const frame = useCurrentFrame();
   const { durationInFrames: stepDuration } = useVideoConfig();
 
@@ -143,12 +143,21 @@ const CodeStep: React.FC<{
         />
 
         {step.annotations.map((callout, i) => (
-          <FloatingAnnotation
-            key={i}
-            callout={callout}
-            stepDuration={stepDuration}
-            codeWidth={codeWidth}
-          />
+          <React.Fragment key={i}>
+            <HighlightBox
+              targetLine={callout.targetLine}
+              lineStartX={callout.lineStartX}
+              lineEndX={callout.lineEndX}
+              startFrame={callout.startFrame}
+              stepDuration={stepDuration}
+              theme={callout.theme}
+            />
+            <FloatingAnnotation
+              callout={callout}
+              stepDuration={stepDuration}
+              lineEndX={callout.lineEndX}
+            />
+          </React.Fragment>
         ))}
 
         <div style={codeWrapStyle}>
@@ -165,10 +174,9 @@ const CodeStep: React.FC<{
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-export const Main: React.FC<Props> = ({ steps, themeColors, codeWidth, folder }) => {
+export const Main: React.FC<Props> = ({ steps, themeColors, folder }) => {
   if (!steps) throw new Error("Steps are not defined");
   if (!themeColors) throw new Error("Theme colors are not defined");
-  if (codeWidth == null) throw new Error("codeWidth is not defined");
 
   // ── 預計算每步捲動目標（只增不減）────────────────────────────────
   const scrollTargets = useMemo(() => {
@@ -197,7 +205,6 @@ export const Main: React.FC<Props> = ({ steps, themeColors, codeWidth, folder })
       >
         <IDEFrame filename={`${folder}.cpp`}>
           <AbsoluteFill>
-            <ProgressBar steps={steps} />
             <Series>
               {steps.map((step, index) => (
                 <Series.Sequence
@@ -211,7 +218,6 @@ export const Main: React.FC<Props> = ({ steps, themeColors, codeWidth, folder })
                     prevCode={steps[index - 1]?.code ?? null}
                     scrollFrom={index > 0 ? scrollTargets[index - 1] : 0}
                     scrollTo={scrollTargets[index]}
-                    codeWidth={codeWidth}
                   />
                 </Series.Sequence>
               ))}

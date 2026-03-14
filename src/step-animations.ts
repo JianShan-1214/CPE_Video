@@ -19,6 +19,10 @@ export interface AnnotationCallout {
   startFrame: number;
   /** 顏色主題 */
   theme?: "blue" | "yellow" | "green" | "red";
+  /** 該行程式碼文字起始 X 座標（px，含縮排），由 calculateMetadata 計算後填入 */
+  lineStartX: number;
+  /** 該行程式碼右端的 X 座標（px），由 calculateMetadata 計算後填入 */
+  lineEndX: number;
 }
 
 const LINE_HEIGHT_PX = 36; // fontSize(24) * lineHeight(1.5)

@@ -59,6 +59,7 @@ export const calculateMetadata: CalculateMetadataFunction<
       .map((line) => line.replaceAll("\t", " ".repeat(tabSize)).length),
   );
   const codeWidth = widthPerCharacter * maxCharacters;
+  const charWidth = widthPerCharacter;
 
   const themeColors = await getThemeColors(props.theme);
 
@@ -68,12 +69,20 @@ export const calculateMetadata: CalculateMetadataFunction<
     durationInFrames: stepDurations[i],
     subtitle: stepConfig.subtitle,
     highlight: resolveHighlight(stepConfig.highlight),
-    annotations: (stepConfig.annotations ?? []).map((ann) => ({
-      targetLine: ann.targetLine,
-      text: ann.text,
-      startFrame: Math.round(ann.startTime * FPS),
-      theme: ann.theme,
-    })),
+    annotations: (stepConfig.annotations ?? []).map((ann) => {
+      const rawLine = rawCodes[i].split("\n")[ann.targetLine - 1] ?? "";
+      const expanded = rawLine.replaceAll("\t", " ".repeat(tabSize));
+      const lineChars = expanded.length;
+      const leadingChars = (expanded.match(/^ */)?.[0].length ?? 0);
+      return {
+        targetLine: ann.targetLine,
+        text: ann.text,
+        startFrame: Math.round(ann.startTime * FPS),
+        theme: ann.theme,
+        lineStartX: horizontalPadding + lineNumberGutterWidth + leadingChars * charWidth,
+        lineEndX: horizontalPadding + lineNumberGutterWidth + lineChars * charWidth,
+      };
+    }),
   }));
 
   const naturalWidth = codeWidth + (horizontalPadding + lineNumberGutterWidth) * 2;
@@ -94,6 +103,7 @@ export const calculateMetadata: CalculateMetadataFunction<
       steps: resolvedSteps,
       themeColors,
       codeWidth,
+      charWidth,
     },
   };
 };

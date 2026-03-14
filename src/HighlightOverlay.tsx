@@ -40,9 +40,10 @@ export const HighlightOverlay: React.FC<{
   // ── 尺寸計算 ────────────────────────────────────────────────────────
   const hlStart = config.startLine;
   const hlEnd   = config.endLine;
+  const PAD = 8; // highlight 上下各多留 8px，避免緊貼文字
 
-  const hlTop    = (hlStart - 1) * LINE_HEIGHT + verticalPadding;
-  const hlHeight = (hlEnd - hlStart + 1) * LINE_HEIGHT;
+  const hlTop    = (hlStart - 1) * LINE_HEIGHT + verticalPadding - PAD;
+  const hlHeight = (hlEnd - hlStart + 1) * LINE_HEIGHT + PAD * 2;
 
   const topDimHeight    = hlTop;                               // 0 → hlTop
   const bottomDimTop    = hlTop + hlHeight;                    // hlEnd 之後

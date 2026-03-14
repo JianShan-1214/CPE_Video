@@ -113,6 +113,7 @@ export function CodeTransition({
       lineHeight: 1.5,
       fontFamily,
       tabSize,
+      margin: 0,
     };
   }, []);
 
