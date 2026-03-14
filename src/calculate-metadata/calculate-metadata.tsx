@@ -1,7 +1,8 @@
 import { getThemeColors } from "@code-hike/lighter";
 import { measureText } from "@remotion/layout-utils";
 import { HighlightedCode } from "codehike/code";
-import { CalculateMetadataFunction } from "remotion";
+import { getAudioDurationInSeconds } from "@remotion/media-utils";
+import { CalculateMetadataFunction, staticFile } from "remotion";
 import { z } from "zod";
 import { resolveHighlight } from "../config-types";
 import { fontFamily, fontSize, horizontalPadding, lineNumberGutterWidth, tabSize, waitUntilDone } from "../font";
@@ -39,12 +40,6 @@ export const calculateMetadata: CalculateMetadataFunction<
     highlightedSteps.push(highlighted);
   }
 
-  // 計算每步 durationInFrames（from/to 單位為秒）
-  const stepDurations = stepConfigs.map((s) =>
-    Math.round((s.to - s.from) * FPS),
-  );
-  const totalFrames = stepDurations.reduce((a, b) => a + b, 0);
-
   // 計算影片寬度（以最長的一行的原始字元數為準）
   const widthPerCharacter = measureText({
     text: "A",
@@ -63,27 +58,48 @@ export const calculateMetadata: CalculateMetadataFunction<
 
   const themeColors = await getThemeColors(props.theme);
 
-  // 組裝每個步驟的完整 props（傳給 Main）
-  const resolvedSteps = stepConfigs.map((stepConfig, i) => ({
-    code: highlightedSteps[i],
-    durationInFrames: stepDurations[i],
-    subtitle: stepConfig.subtitle,
-    highlight: resolveHighlight(stepConfig.highlight),
-    annotations: (stepConfig.annotations ?? []).map((ann) => {
-      const rawLine = rawCodes[i].split("\n")[ann.targetLine - 1] ?? "";
-      const expanded = rawLine.replaceAll("\t", " ".repeat(tabSize));
-      const lineChars = expanded.length;
-      const leadingChars = (expanded.match(/^ */)?.[0].length ?? 0);
+  // 組裝每步完整 props，同時讀取音訊長度（若存在）以調整 durationInFrames
+  const resolvedSteps = await Promise.all(
+    stepConfigs.map(async (stepConfig, i) => {
+      const paddedIndex = String(i + 1).padStart(2, "0");
+      const audioSrc = staticFile(`${folder}/audio/step_${paddedIndex}.mp3`);
+
+      let stepDuration = Math.round((stepConfig.to - stepConfig.from) * FPS);
+      let resolvedAudioSrc: string | undefined = undefined;
+
+      try {
+        const secs = await getAudioDurationInSeconds(audioSrc);
+        resolvedAudioSrc = audioSrc;
+        stepDuration = Math.max(stepDuration, Math.ceil(secs * FPS));
+      } catch {
+        // 音訊檔不存在 — 使用 config 時長
+      }
+
       return {
-        targetLine: ann.targetLine,
-        text: ann.text,
-        startFrame: Math.round(ann.startTime * FPS),
-        theme: ann.theme,
-        lineStartX: horizontalPadding + lineNumberGutterWidth + leadingChars * charWidth,
-        lineEndX: horizontalPadding + lineNumberGutterWidth + lineChars * charWidth,
+        code: highlightedSteps[i],
+        durationInFrames: stepDuration,
+        subtitle: stepConfig.subtitle,
+        highlight: resolveHighlight(stepConfig.highlight),
+        annotations: (stepConfig.annotations ?? []).map((ann) => {
+          const rawLine = rawCodes[i].split("\n")[ann.targetLine - 1] ?? "";
+          const expanded = rawLine.replaceAll("\t", " ".repeat(tabSize));
+          const lineChars = expanded.length;
+          const leadingChars = (expanded.match(/^ */)?.[0].length ?? 0);
+          return {
+            targetLine: ann.targetLine,
+            text: ann.text,
+            startFrame: Math.round(ann.startTime * FPS),
+            theme: ann.theme,
+            lineStartX: horizontalPadding + lineNumberGutterWidth + leadingChars * charWidth,
+            lineEndX: horizontalPadding + lineNumberGutterWidth + lineChars * charWidth,
+          };
+        }),
+        audioSrc: resolvedAudioSrc,
       };
     }),
-  }));
+  );
+
+  const totalFrames = resolvedSteps.reduce((a, s) => a + s.durationInFrames, 0);
 
   const naturalWidth = codeWidth + (horizontalPadding + lineNumberGutterWidth) * 2;
   const divisibleByTwo = Math.ceil(naturalWidth / 2) * 2;
