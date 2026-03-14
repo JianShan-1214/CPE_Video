@@ -8,6 +8,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
+import { AudioPlayer } from "./AudioPlayer";
 import { CodeTransition } from "./CodeTransition";
 import { FloatingAnnotation } from "./FloatingAnnotation";
 import { HighlightBox } from "./HighlightBox";
@@ -33,6 +34,7 @@ export type StepProps = {
   subtitle: string;
   highlight: HighlightConfig;
   annotations: AnnotationCallout[];
+  audioSrc: string | undefined;
 };
 
 export type Props = {
@@ -168,6 +170,7 @@ const CodeStep: React.FC<{
           />
         </div>
       </div>
+      {step.audioSrc && <AudioPlayer src={step.audioSrc} />}
     </div>
   );
 };
