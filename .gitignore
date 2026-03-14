@@ -5,3 +5,14 @@ dist
 
 # Ignore the output video from Git but not videos you import into src/.
 out
+
+.agents/
+.claude/
+.codex/
+.cursor/
+.gemini/
+.kiro/
+.opencode/
+
+public/
+

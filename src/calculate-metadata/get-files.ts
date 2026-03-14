@@ -1,20 +1,25 @@
 import { getStaticFiles } from "@remotion/studio";
+import { VideoConfigJSON } from "../config-types";
 
 export type PublicFolderFile = {
   filename: string;
   value: string;
 };
 
-export const getFiles = async () => {
+/** 讀取 public/config.json */
+export const getVideoConfig = async (): Promise<VideoConfigJSON> => {
   const files = getStaticFiles();
-  const codeFiles = files.filter((file) => file.name.startsWith("code"));
+  const configFile = files.find((f) => f.name === "config.json");
+  if (!configFile) throw new Error("找不到 public/config.json");
+  const res = await fetch(configFile.src);
+  return res.json() as Promise<VideoConfigJSON>;
+};
 
-  const contents = codeFiles.map(async (file): Promise<PublicFolderFile> => {
-    const contents = await fetch(file.src);
-    const text = await contents.text();
-
-    return { filename: file.name, value: text };
-  });
-
-  return Promise.all(contents);
+/** 讀取 public/ 內指定的單一檔案 */
+export const getFileByName = async (filename: string): Promise<string> => {
+  const files = getStaticFiles();
+  const file = files.find((f) => f.name === filename);
+  if (!file) throw new Error(`找不到 public/${filename}`);
+  const res = await fetch(file.src);
+  return res.text();
 };

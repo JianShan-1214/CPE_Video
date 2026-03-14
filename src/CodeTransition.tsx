@@ -51,29 +51,53 @@ export function CodeTransition({
       setOldSnapshot(getStartingSnapshot(ref.current!));
       return;
     }
-    const transitions = calculateTransitions(ref.current!, oldSnapshot);
-    transitions.forEach(({ element, keyframes, options }) => {
-      const delay = durationInFrames * options.delay;
-      const duration = durationInFrames * options.duration;
+    const allTransitions = calculateTransitions(ref.current!, oldSnapshot);
+
+    // Separate entering tokens (new characters) for typewriter effect
+    const entering = allTransitions.filter(
+      (t) => t.keyframes.opacity?.[0] === 0,
+    );
+    const others = allTransitions.filter((t) => !(t.keyframes.opacity?.[0] === 0));
+
+    // Sort entering tokens by DOM document order (top-to-bottom, left-to-right)
+    entering.sort((a, b) => {
+      const pos = a.element.compareDocumentPosition(b.element);
+      if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+      if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+      return 0;
+    });
+
+    // Map each entering token to a sequential typewriter delay
+    const typewriterMap = new Map<HTMLElement, { delay: number; duration: number }>();
+    entering.forEach((t, i) => {
+      const frac = entering.length > 1 ? i / (entering.length - 1) : 0;
+      typewriterMap.set(t.element, {
+        delay: frac * 0.82,   // spread typing over 82% of the transition window
+        duration: 0.08,       // each token snaps in quickly
+      });
+    });
+
+    // Apply transitions: typewriter ordering for entering, normal easing for others
+    [...others, ...entering].forEach(({ element, keyframes, options }) => {
+      const tw = typewriterMap.get(element);
+      const effectiveDelay = tw ? tw.delay : options.delay;
+      const effectiveDuration = tw ? tw.duration : options.duration;
+
+      const delay = durationInFrames * effectiveDelay;
+      const duration = durationInFrames * effectiveDuration;
       const linearProgress = interpolate(
         frame,
         [delay, delay + duration],
         [0, 1],
-        {
-          extrapolateLeft: "clamp",
-          extrapolateRight: "clamp",
-        },
+        { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
       );
-      const progress = interpolate(linearProgress, [0, 1], [0, 1], {
-        easing: Easing.bezier(0.17, 0.67, 0.76, 0.91),
-      });
+      const progress = tw
+        ? linearProgress
+        : interpolate(linearProgress, [0, 1], [0, 1], {
+            easing: Easing.bezier(0.17, 0.67, 0.76, 0.91),
+          });
 
-      applyStyle({
-        element,
-        keyframes,
-        progress,
-        linearProgress,
-      });
+      applyStyle({ element, keyframes, progress, linearProgress });
     });
     continueRender(handle);
   });

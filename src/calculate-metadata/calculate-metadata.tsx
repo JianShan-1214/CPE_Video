@@ -3,24 +3,47 @@ import { measureText } from "@remotion/layout-utils";
 import { HighlightedCode } from "codehike/code";
 import { CalculateMetadataFunction } from "remotion";
 import { z } from "zod";
-import {
-  fontFamily,
-  fontSize,
-  horizontalPadding,
-  tabSize,
-  waitUntilDone,
-} from "../font";
+import { resolveHighlight } from "../config-types";
+import { fontFamily, fontSize, horizontalPadding, lineNumberGutterWidth, tabSize, waitUntilDone } from "../font";
 import { Props } from "../Main";
-import { getFiles } from "./get-files";
+import { getFileByName, getVideoConfig } from "./get-files";
 import { processSnippet } from "./process-snippet";
 import { schema } from "./schema";
+
+const FPS = 30;
 
 export const calculateMetadata: CalculateMetadataFunction<
   Props & z.infer<typeof schema>
 > = async ({ props }) => {
-  const contents = await getFiles();
+  // 讀取 config.json
+  const config = await getVideoConfig();
+  const { steps: stepConfigs } = config;
 
   await waitUntilDone();
+
+  // 載入各步驟的 cpp 原始碼
+  const rawCodes: string[] = [];
+  for (const stepConfig of stepConfigs) {
+    rawCodes.push(await getFileByName(stepConfig.file));
+  }
+
+  // Syntax highlight
+  const highlightedSteps: HighlightedCode[] = [];
+  for (let i = 0; i < stepConfigs.length; i++) {
+    const highlighted = await processSnippet(
+      { filename: stepConfigs[i].file, value: rawCodes[i] },
+      props.theme,
+    );
+    highlightedSteps.push(highlighted);
+  }
+
+  // 計算每步 durationInFrames（from/to 單位為秒）
+  const stepDurations = stepConfigs.map((s) =>
+    Math.round((s.to - s.from) * FPS),
+  );
+  const totalFrames = stepDurations.reduce((a, b) => a + b, 0);
+
+  // 計算影片寬度（以最長的一行的原始字元數為準）
   const widthPerCharacter = measureText({
     text: "A",
     fontFamily,
@@ -29,31 +52,35 @@ export const calculateMetadata: CalculateMetadataFunction<
   }).width;
 
   const maxCharacters = Math.max(
-    ...contents
-      .map(({ value }) => value.split("\n"))
-      .flat()
-      .map((value) => value.replaceAll("\t", " ".repeat(tabSize)).length)
-      .flat(),
+    ...rawCodes
+      .flatMap((code) => code.split("\n"))
+      .map((line) => line.replaceAll("\t", " ".repeat(tabSize)).length),
   );
   const codeWidth = widthPerCharacter * maxCharacters;
 
-  const defaultStepDuration = 90;
-
   const themeColors = await getThemeColors(props.theme);
 
-  const twoSlashedCode: HighlightedCode[] = [];
-  for (const snippet of contents) {
-    twoSlashedCode.push(await processSnippet(snippet, props.theme));
-  }
+  // 組裝每個步驟的完整 props（傳給 Main）
+  const resolvedSteps = stepConfigs.map((stepConfig, i) => ({
+    code: highlightedSteps[i],
+    durationInFrames: stepDurations[i],
+    subtitle: stepConfig.subtitle,
+    highlight: resolveHighlight(stepConfig.highlight),
+    annotations: (stepConfig.annotations ?? []).map((ann) => ({
+      targetLine: ann.targetLine,
+      text: ann.text,
+      startFrame: Math.round(ann.startTime * FPS),
+      theme: ann.theme,
+    })),
+  }));
 
-  const naturalWidth = codeWidth + horizontalPadding * 2;
-  const divisibleByTwo = Math.ceil(naturalWidth / 2) * 2; // MP4 requires an even width
-
+  const naturalWidth = codeWidth + (horizontalPadding + lineNumberGutterWidth) * 2;
+  const divisibleByTwo = Math.ceil(naturalWidth / 2) * 2;
   const minimumWidth = props.width.type === "fixed" ? 0 : 1080;
   const minimumWidthApplied = Math.max(minimumWidth, divisibleByTwo);
 
   return {
-    durationInFrames: contents.length * defaultStepDuration,
+    durationInFrames: totalFrames,
     width:
       props.width.type === "fixed"
         ? Math.max(minimumWidthApplied, props.width.value)
@@ -61,7 +88,7 @@ export const calculateMetadata: CalculateMetadataFunction<
     props: {
       theme: props.theme,
       width: props.width,
-      steps: twoSlashedCode,
+      steps: resolvedSteps,
       themeColors,
       codeWidth,
     },
