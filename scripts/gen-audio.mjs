@@ -23,6 +23,10 @@ if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
   console.error("Error: GOOGLE_APPLICATION_CREDENTIALS is not set in .env");
   process.exit(1);
 }
+if (!existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
+  console.error(`Error: credential file not found: ${process.env.GOOGLE_APPLICATION_CREDENTIALS}`);
+  process.exit(1);
+}
 
 // ── Read config ────────────────────────────────────────────────────────────
 const configPath = join("public", folder, "config.json");
@@ -92,11 +96,15 @@ for (let i = 0; i < total; i++) {
 
   if (!res.ok) {
     const err = await res.text();
-    console.error(`${label} failed: ${err}`);
+    console.error(`${label} failed (HTTP ${res.status}): ${err}`);
     process.exit(1);
   }
 
-  const { audioContent } = await res.json();
-  writeFileSync(outPath, Buffer.from(audioContent, "base64"));
+  const body = await res.json();
+  if (!body.audioContent) {
+    console.error(`${label} failed: response missing audioContent`);
+    process.exit(1);
+  }
+  writeFileSync(outPath, Buffer.from(body.audioContent, "base64"));
   console.log(`${label} ✓`);
 }
