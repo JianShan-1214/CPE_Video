@@ -93,13 +93,13 @@
       },
       "annotations": [
         {
-          "targetLine": 11,
+          "targetLine": 10,
           "text": "暫存原始值",
           "startTime": 3.2,
           "theme": "green"
         },
         {
-          "targetLine": 13,
+          "targetLine": 12,
           "text": "放回暫存值",
           "startTime": 3.5,
           "theme": "green"

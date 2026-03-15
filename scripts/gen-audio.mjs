@@ -7,7 +7,7 @@ import "dotenv/config";
 // ── Parse args ─────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
 const folder = args.find((a) => !a.startsWith("--"));
-const force  = args.includes("--force");
+const force  = args.includes("--force") || process.env.npm_config_force === "true";
 const stepArg = (() => {
   const i = args.indexOf("--step");
   return i !== -1 ? parseInt(args[i + 1], 10) : null;
