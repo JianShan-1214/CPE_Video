@@ -37,6 +37,23 @@ const steps  = config.steps;
 const audioDir = join("public", folder, "audio");
 mkdirSync(audioDir, { recursive: true });
 
+// ── SSML builder ───────────────────────────────────────────────────────────
+// 將中英混雜的字幕轉成 SSML，英文 token 用 <lang xml:lang="en-US"> 包住
+// 讓 zh-TW 語音引擎對英文單字切換成英文發音
+const VOICE = "zh-TW-HsiaoChenNeural";
+
+function toSSML(text) {
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  // 連續的英文 token（含底線、數字）合併為同一段 en-US，避免切換過於頻繁
+  const body = escaped.replace(/[A-Za-z][A-Za-z0-9_]*(?:[ \t][A-Za-z][A-Za-z0-9_]*)*/g,
+    (m) => `<lang xml:lang="en-US">${m}</lang>`,
+  );
+  return `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="zh-TW"><voice name="${VOICE}">${body}</voice></speak>`;
+}
+
 // ── Generate ───────────────────────────────────────────────────────────────
 const total = steps.length;
 for (let i = 0; i < total; i++) {
@@ -62,7 +79,7 @@ for (let i = 0; i < total; i++) {
   console.log(`${label} generating…`);
   const result = spawnSync(
     "uv",
-    ["run", "--with", "edge-tts", "edge-tts", "--voice", "zh-TW-HsiaoChenNeural", "--text", subtitle, "--write-media", outPath],
+    ["run", "--with", "edge-tts", "edge-tts", "--voice", VOICE, "--text", toSSML(subtitle), "--write-media", outPath],
     { stdio: "inherit" },
   );
   if (result.status !== 0) {
