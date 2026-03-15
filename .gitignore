@@ -8,6 +8,8 @@ out
 
 .agents/
 .claude/
+!.claude/skills/
+!.claude/skills/**
 .codex/
 .cursor/
 .gemini/
