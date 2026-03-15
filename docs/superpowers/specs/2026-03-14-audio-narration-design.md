@@ -8,7 +8,9 @@
 
 ## Overview
 
-Add AI-generated voice narration to each video step using `edge-tts` (Microsoft Azure Neural TTS, free). The narration text is the existing `subtitle` field in `config.json`. Audio is generated separately before rendering so the user can review and adjust subtitles before committing to a render.
+Add AI-generated voice narration to each video step using **Google Cloud Gemini 2.5 Flash TTS** (`gemini-2.5-flash-tts`, voice: `Achernar`, language: `cmn-TW`). The narration text is the existing `subtitle` field in `config.json`. Audio is generated separately before rendering so the user can review and adjust subtitles before committing to a render.
+
+Credentials are loaded from `GOOGLE_APPLICATION_CREDENTIALS` in `.env` (Service Account JSON). Required GCP roles: **Cloud Text-to-Speech API User** + **Vertex AI User**.
 
 ---
 
