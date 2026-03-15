@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-import { spawnSync } from "child_process";
-import { existsSync, mkdirSync, readFileSync } from "fs";
+import { TextToSpeechClient } from "@google-cloud/text-to-speech";
+import { writeFileSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { join } from "path";
+import "dotenv/config";
 
 // ── Parse args ─────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -17,10 +18,9 @@ if (!folder) {
   process.exit(1);
 }
 
-// ── Check uv ───────────────────────────────────────────────────────────────
-const check = spawnSync("uv", ["--version"], { encoding: "utf8" });
-if (check.error) {
-  console.error("Error: uv not found. Install from https://docs.astral.sh/uv/getting-started/installation/");
+// ── Check credentials ───────────────────────────────────────────────────────
+if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  console.error("Error: GOOGLE_APPLICATION_CREDENTIALS is not set in .env");
   process.exit(1);
 }
 
@@ -38,21 +38,20 @@ const audioDir = join("public", folder, "audio");
 mkdirSync(audioDir, { recursive: true });
 
 // ── SSML builder ───────────────────────────────────────────────────────────
-// 將中英混雜的字幕轉成 SSML，英文 token 用 <lang xml:lang="en-US"> 包住
-// 讓 zh-TW 語音引擎對英文單字切換成英文發音
-const VOICE = "zh-TW-HsiaoChenNeural";
-
+// 英文 token 用 <lang xml:lang="en-US"> 包住，讓 zh-TW 語音引擎正確發音
 function toSSML(text) {
   const escaped = text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
-  // 連續的英文 token（含底線、數字）合併為同一段 en-US，避免切換過於頻繁
   const body = escaped.replace(/[A-Za-z][A-Za-z0-9_]*(?:[ \t][A-Za-z][A-Za-z0-9_]*)*/g,
     (m) => `<lang xml:lang="en-US">${m}</lang>`,
   );
-  return `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="zh-TW"><voice name="${VOICE}">${body}</voice></speak>`;
+  return `<speak>${body}</speak>`;
 }
+
+// ── TTS client ─────────────────────────────────────────────────────────────
+const client = new TextToSpeechClient();
 
 // ── Generate ───────────────────────────────────────────────────────────────
 const total = steps.length;
@@ -61,7 +60,6 @@ for (let i = 0; i < total; i++) {
   const padded = String(num).padStart(2, "0");
   const label  = `[${num}/${total}] step_${padded}.mp3`;
 
-  // Filter by --step if provided
   if (stepArg !== null && stepArg !== num) continue;
 
   const subtitle = steps[i].subtitle;
@@ -77,14 +75,18 @@ for (let i = 0; i < total; i++) {
   }
 
   console.log(`${label} generating…`);
-  const result = spawnSync(
-    "uv",
-    ["run", "--with", "edge-tts", "edge-tts", "--voice", VOICE, "--text", toSSML(subtitle), "--write-media", outPath],
-    { stdio: "inherit" },
-  );
-  if (result.status !== 0) {
-    console.error(`${label} failed`);
-    process.exit(1);
-  }
+  const [response] = await client.synthesizeSpeech({
+    input: { ssml: toSSML(subtitle) },
+    voice: {
+      languageCode: "zh-TW",
+      name: "zh-TW-Neural2-A",
+    },
+    audioConfig: {
+      audioEncoding: "MP3",
+      speakingRate: 1.0,
+    },
+  });
+
+  writeFileSync(outPath, response.audioContent, "binary");
   console.log(`${label} ✓`);
 }
