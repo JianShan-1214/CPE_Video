@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { TextToSpeechClient } from "@google-cloud/text-to-speech";
+import { GoogleAuth } from "google-auth-library";
 import { writeFileSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { join } from "path";
 import "dotenv/config";
@@ -37,21 +37,13 @@ const steps  = config.steps;
 const audioDir = join("public", folder, "audio");
 mkdirSync(audioDir, { recursive: true });
 
-// ── SSML builder ───────────────────────────────────────────────────────────
-// 英文 token 用 <lang xml:lang="en-US"> 包住，讓 zh-TW 語音引擎正確發音
-function toSSML(text) {
-  const escaped = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-  const body = escaped.replace(/[A-Za-z][A-Za-z0-9_]*(?:[ \t][A-Za-z][A-Za-z0-9_]*)*/g,
-    (m) => `<lang xml:lang="en-US">${m}</lang>`,
-  );
-  return `<speak>${body}</speak>`;
-}
-
-// ── TTS client ─────────────────────────────────────────────────────────────
-const client = new TextToSpeechClient();
+// ── Auth ───────────────────────────────────────────────────────────────────
+const auth = new GoogleAuth({
+  keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+  scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+});
+const authClient = await auth.getClient();
+const { token } = await authClient.getAccessToken();
 
 // ── Generate ───────────────────────────────────────────────────────────────
 const total = steps.length;
@@ -75,18 +67,36 @@ for (let i = 0; i < total; i++) {
   }
 
   console.log(`${label} generating…`);
-  const [response] = await client.synthesizeSpeech({
-    input: { ssml: toSSML(subtitle) },
-    voice: {
-      languageCode: "zh-TW",
-      name: "zh-TW-Neural2-A",
+  const res = await fetch("https://texttospeech.googleapis.com/v1beta1/text:synthesize", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
     },
-    audioConfig: {
-      audioEncoding: "MP3",
-      speakingRate: 1.0,
-    },
+    body: JSON.stringify({
+      audioConfig: {
+        audioEncoding: "MP3",
+        speakingRate: 1,
+      },
+      input: {
+        prompt: "以清晰、自然、適合教學影片的語氣朗讀。",
+        text: subtitle,
+      },
+      voice: {
+        languageCode: "cmn-TW",
+        modelName: "gemini-2.5-flash-tts",
+        name: "Achernar",
+      },
+    }),
   });
 
-  writeFileSync(outPath, response.audioContent, "binary");
+  if (!res.ok) {
+    const err = await res.text();
+    console.error(`${label} failed: ${err}`);
+    process.exit(1);
+  }
+
+  const { audioContent } = await res.json();
+  writeFileSync(outPath, Buffer.from(audioContent, "base64"));
   console.log(`${label} ✓`);
 }
