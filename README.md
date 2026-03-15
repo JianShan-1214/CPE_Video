@@ -69,7 +69,31 @@ npm run render <影片資料夾>        # 輸出影片
 
 ## AI 語音旁白
 
-`subtitle` 欄位同時作為字幕與 AI 語音的來源，使用微軟 Azure Neural TTS（`zh-TW-HsiaoChenNeural`，免費）。
+`subtitle` 欄位同時作為字幕與 AI 語音的來源，使用 **Google Cloud Gemini 2.5 Flash TTS**（`Achernar` 聲音，`cmn-TW`）。原生支援中英混雜，無需額外設定。
+
+### 前置設定（一次性）
+
+**1. 開啟 GCP API 與權限**
+
+在 [Google Cloud Console](https://console.cloud.google.com/) 完成以下設定：
+- 啟用 **Cloud Text-to-Speech API**
+- 啟用 **Vertex AI API**
+- 建立 Service Account，授予兩個角色：
+  - `Cloud Text-to-Speech API User`
+  - `Vertex AI User`
+- 下載 Service Account 的 **JSON 金鑰**
+
+**2. 建立 `.env`**
+
+```bash
+cp .env.example .env
+```
+
+編輯 `.env`，填入金鑰路徑：
+
+```
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/your-service-account-key.json
+```
 
 ### 產生語音
 
@@ -84,15 +108,6 @@ npm run gen-audio bubble_sort --step 3      # 只重新產生第 3 步（1-index
 ### 時長自動延伸
 
 若音訊比 config 設定的 `to - from` 還長，該步驟會自動延伸，確保旁白播完才切換到下一步。
-
-### 前置需求
-
-需安裝 [uv](https://docs.astral.sh/uv/getting-started/installation/)，edge-tts 會由 uv 自動管理，無需手動 pip install：
-
-```bash
-# macOS / Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
 
 ---
 
