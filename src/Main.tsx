@@ -16,15 +16,11 @@ import { HighlightOverlay } from "./HighlightOverlay";
 import { LineNumbers } from "./LineNumbers";
 import { RefreshOnCodeChange } from "./ReloadOnCodeChange";
 import { ThemeColors, ThemeProvider } from "./calculate-metadata/theme";
-import { fontSize, horizontalPadding, lineNumberGutterWidth, verticalPadding } from "./font";
-import {
-  CODE_AREA_HEIGHT,
-  CODE_SECTION_HEIGHT,
-  IDEFrame,
-  SUBTITLE_HEIGHT,
-} from "./IDEFrame";
+import { horizontalPadding, lineNumberGutterWidth, verticalPadding } from "./font";
+import { CODE_SECTION_HEIGHT, IDEFrame, SUBTITLE_HEIGHT } from "./IDEFrame";
 import { SubtitleBar } from "./SubtitleBar";
-import { AnnotationCallout, HighlightConfig, targetLineY } from "./step-animations";
+import { AnnotationCallout, HighlightConfig } from "./step-animations";
+import { computeStepScroll } from "./step-visual-elements";
 
 // ─── 型別定義 ──────────────────────────────────────────────────────────────────
 
@@ -32,7 +28,8 @@ export type StepProps = {
   code: HighlightedCode;
   durationInFrames: number;
   subtitle: string;
-  highlight: HighlightConfig;
+  focusLine: number | null;
+  highlight: HighlightConfig | null;
   annotations: AnnotationCallout[];
   audioSrc: string | undefined;
 };
@@ -51,17 +48,6 @@ export type Props = {
 const TRANSITION_DURATION = 85;
 // Highlight 在打字結束後淡入
 const ANIM_IN_START = TRANSITION_DURATION;
-
-// ─── 捲動計算 ─────────────────────────────────────────────────────────────────
-
-function computeStepScroll(highlight: HighlightConfig, totalLines: number): number {
-  const lineHeight = fontSize * 1.5;
-  const tlY = targetLineY(highlight.startLine, verticalPadding);
-  const idealScroll = Math.max(0, tlY - CODE_AREA_HEIGHT / 2);
-  const estimatedHeight = totalLines * lineHeight + verticalPadding + 20;
-  const maxScroll = Math.max(0, estimatedHeight - CODE_AREA_HEIGHT);
-  return Math.min(idealScroll, maxScroll);
-}
 
 // ─── CodeStep ────────────────────────────────────────────────────────────────
 
@@ -104,7 +90,6 @@ const CodeStep: React.FC<{
       opacity: fadeIn,
       transform: `translateY(${slideY}px)`,
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [fadeIn, slideY],
   );
 
@@ -130,16 +115,18 @@ const CodeStep: React.FC<{
   return (
     <div style={outerStyle}>
       <div style={scrollWrapStyle}>
-        <HighlightOverlay
-          config={step.highlight}
-          showFromFrame={ANIM_IN_START}
-          stepDuration={stepDuration}
-          totalLines={step.code.tokens.length}
-        />
+        {step.highlight && (
+          <HighlightOverlay
+            config={step.highlight}
+            showFromFrame={ANIM_IN_START}
+            stepDuration={stepDuration}
+            totalLines={step.code.tokens.length}
+          />
+        )}
 
         <LineNumbers
           totalLines={step.code.tokens.length}
-          config={step.highlight}
+          config={step.highlight ?? undefined}
           showFromFrame={ANIM_IN_START}
           stepDuration={stepDuration}
         />
@@ -181,15 +168,21 @@ export const Main: React.FC<Props> = ({ steps, themeColors, folder }) => {
   if (!steps) throw new Error("Steps are not defined");
   if (!themeColors) throw new Error("Theme colors are not defined");
 
-  // ── 預計算每步捲動目標（只增不減）────────────────────────────────
+  // ── 預計算每步捲動目標 ────────────────────────────────────────────
   const scrollTargets = useMemo(() => {
-    const raw = steps.map((step) =>
-      computeStepScroll(step.highlight, step.code.tokens.length),
-    );
-    return raw.reduce<number[]>((acc, val, i) => {
-      acc.push(Math.max(val, i > 0 ? acc[i - 1] : 0));
-      return acc;
-    }, []);
+    const acc: number[] = [];
+    for (let i = 0; i < steps.length; i++) {
+      const prev = i > 0 ? acc[i - 1] : 0;
+      acc.push(
+        computeStepScroll({
+          focusLine: steps[i].focusLine,
+          highlight: steps[i].highlight,
+          totalLines: steps[i].code.tokens.length,
+          prevScroll: prev,
+        }),
+      );
+    }
+    return acc;
   }, [steps]);
 
   const subtitles = useMemo(() => steps.map((s) => s.subtitle), [steps]);
@@ -214,7 +207,13 @@ export const Main: React.FC<Props> = ({ steps, themeColors, folder }) => {
                   key={index}
                   layout="none"
                   durationInFrames={step.durationInFrames}
-                  name={step.highlight.startLine + "-" + step.highlight.endLine}
+                  name={
+                    step.highlight
+                      ? `${step.highlight.startLine}-${step.highlight.endLine}`
+                      : step.focusLine
+                        ? `focus-${step.focusLine}`
+                        : "no-highlight"
+                  }
                 >
                   <CodeStep
                     step={step}

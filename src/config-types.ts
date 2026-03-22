@@ -39,8 +39,10 @@ export type StepJSON = {
   file: string;
   /** 字幕文字 */
   subtitle: string;
+  /** 強制捲動對齊的行號（若未指定，則對齊 highlight 中間）*/
+  focusLine?: number;
   /** highlight 設定 */
-  highlight: HighlightConfigJSON;
+  highlight?: HighlightConfigJSON;
   /** 浮動標注（可多個，也可省略）*/
   annotations?: AnnotationJSON[];
 };

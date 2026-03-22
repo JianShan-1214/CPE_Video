@@ -15,7 +15,7 @@ export const RemotionRoot = () => {
         theme: "github-dark" as const,
         codeWidth: null,
         charWidth: null,
-        folder: "bubble_sort" as const,
+        folder: "example-bubble_sort" as const,
         width: {
           type: "fixed",
           value: 1920,

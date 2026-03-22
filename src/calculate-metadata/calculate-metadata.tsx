@@ -79,7 +79,8 @@ export const calculateMetadata: CalculateMetadataFunction<
         code: highlightedSteps[i],
         durationInFrames: stepDuration,
         subtitle: stepConfig.subtitle,
-        highlight: resolveHighlight(stepConfig.highlight),
+        focusLine: stepConfig.focusLine ?? null,
+        highlight: stepConfig.highlight ? resolveHighlight(stepConfig.highlight) : null,
         annotations: (stepConfig.annotations ?? []).map((ann) => {
           const rawLine = rawCodes[i].split("\n")[ann.targetLine - 1] ?? "";
           const expanded = rawLine.replaceAll("\t", " ".repeat(tabSize));

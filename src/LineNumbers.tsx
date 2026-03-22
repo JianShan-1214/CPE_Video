@@ -3,10 +3,11 @@ import { Easing, interpolate, useCurrentFrame } from "remotion";
 import { fontSize, lineNumberGutterWidth, verticalPadding } from "./font";
 import { LINE_HEIGHT } from "./HighlightOverlay";
 import { HighlightConfig } from "./step-animations";
+import { getLineNumberAppearance } from "./step-visual-elements";
 
 export const LineNumbers: React.FC<{
   totalLines: number;
-  config: HighlightConfig;
+  config?: HighlightConfig;
   showFromFrame: number;
   stepDuration: number;
 }> = ({ totalLines, config, showFromFrame, stepDuration }) => {
@@ -37,8 +38,7 @@ export const LineNumbers: React.FC<{
     >
       {Array.from({ length: totalLines }, (_, i) => {
         const lineNum = i + 1;
-        const isHighlighted =
-          lineNum >= config.startLine && lineNum <= config.endLine;
+        const appearance = getLineNumberAppearance(lineNum, config, progress);
 
         return (
           <div
@@ -51,9 +51,9 @@ export const LineNumbers: React.FC<{
               fontSize: fontSize * 0.7,
               fontFamily: "JetBrains Mono, monospace",
               paddingRight: 12,
-              color: isHighlighted ? config.borderColor : "#4a5568",
-              opacity: isHighlighted ? 0.4 + progress * 0.6 : 0.5,
-              fontWeight: isHighlighted ? "700" : "400",
+              color: appearance.color,
+              opacity: appearance.opacity,
+              fontWeight: appearance.fontWeight,
             }}
           >
             {lineNum}
