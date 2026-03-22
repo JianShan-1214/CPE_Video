@@ -31,7 +31,7 @@ export const FloatingAnnotation: React.FC<{
   lineEndX: number;
 }> = ({ callout, stepDuration, lineEndX }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, width: videoWidth } = useVideoConfig();
 
   const theme = THEMES[callout.theme ?? "yellow"];
 
@@ -53,15 +53,17 @@ export const FloatingAnnotation: React.FC<{
 
   const opacity = pop * fadeOut;
   const scale  = interpolate(pop, [0, 1], [0.6, 1]);
-  const slideX = interpolate(pop, [0, 1], [-16, 0]);
 
   // 目標行垂直中心
   const lineY = (callout.targetLine - 1) * LINE_HEIGHT + verticalPadding + LINE_HEIGHT / 2;
 
   // X 座標計算
-  const indicatorX  = lineEndX + LINE_GAP;         // 垂直指示條的起始 X
-  const guideStartX = indicatorX + 3;              // 水平引導線起始 X
-  const bubbleX     = guideStartX + LEAD_LENGTH;   // 氣泡左邊 X
+  const SAFE_MARGIN = 32;
+  const indicatorX  = lineEndX + LINE_GAP;
+  const guideStartX = indicatorX + 3;
+  const bubbleX     = guideStartX + LEAD_LENGTH;
+  const bubbleMaxWidth = Math.max(160, videoWidth - bubbleX - SAFE_MARGIN);
+  const slideX      = interpolate(pop, [0, 1], [-16, 0]);
 
   return (
     <>
@@ -118,7 +120,8 @@ export const FloatingAnnotation: React.FC<{
             color: theme.text,
             fontSize: fontSize * 0.95,
             fontFamily: "-apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif",
-            whiteSpace: "nowrap",
+            maxWidth: bubbleMaxWidth,
+            whiteSpace: "normal",
             boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
             letterSpacing: "0.03em",
           }}

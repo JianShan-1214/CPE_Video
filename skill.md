@@ -18,7 +18,7 @@ metadata:
 執行前先閱讀以下文件以了解專案結構與設定格式：
 
 - `README.md` — 完整使用說明與 config.json 欄位定義、highlight 色表
-- `public/bubble_sort/config.json` — 實際設定範例
+- `public/example-bubble_sort/config.json` — 實際設定範例
 
 ---
 
@@ -82,8 +82,10 @@ metadata:
 |------|------|
 | `label` | 簡短標題，顯示於時間軸 |
 | `from` / `to` | 基礎 5 秒，每多 1 行**程式碼**加 0.8 秒，上限 12 秒；語音若超出會自動延伸，不用估太長 |
+| `highlight`（選填）| 通常設定；**最後一步**展示完整程式碼時可省略，改用 `focusLine` 控制捲動位置 |
 | `highlight.startLine` / `endLine` | 這步**新增**的行範圍（1-indexed，以該步累加後的 cpp 檔計算）|
 | `highlight.color` | `blue` 一般宣告、`yellow` 迴圈/流程、`red` 條件判斷、`green` 輸出/關鍵操作、`lightblue` 函式宣告；該步有多種性質時取**主要**操作的顏色 |
+| `focusLine`（選填）| 指定該行出現在畫面**頂部**；無 highlight 時用來控制捲動位置；最後一步通常設 1 讓程式碼從頭顯示 |
 | `subtitle` | 引導式旁白（見下方規則）|
 
 ### Subtitle 寫法
@@ -204,6 +206,14 @@ Subtitle：
         "endLine": 3,
         "color": "blue"
       }
+    },
+    {
+      "label": "完整程式碼展示",
+      "from": 30,
+      "to": 38,
+      "file": "codeN.cpp",
+      "subtitle": "這就是完整的實作。",
+      "focusLine": 1
     }
   ]
 }
