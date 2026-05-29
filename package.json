@@ -6,6 +6,9 @@
   "license": "UNLICENSED",
   "type": "module",
   "private": true,
+  "workspaces": [
+    "web"
+  ],
   "dependencies": {
     "@code-hike/lighter": "1.0.3",
     "@google-cloud/text-to-speech": "^6.4.0",
@@ -38,6 +41,8 @@
     "build": "remotion bundle",
     "upgrade": "remotion upgrade",
     "gen-audio": "node scripts/gen-audio.mjs",
-    "lint": "tsc && eslint src"
+    "lint": "tsc && eslint src",
+    "web:dev": "npm run dev -w web",
+    "web:build": "npm run build -w web"
   }
 }
