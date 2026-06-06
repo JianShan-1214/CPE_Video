@@ -1,5 +1,6 @@
 import { Player } from "@remotion/player";
-import { useEffect, useState } from "react";
+import { AlertTriangle, Clapperboard, Loader2 } from "lucide-react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Main } from "@remotion-src/Main";
 import {
   expandProps,
@@ -58,39 +59,64 @@ export function RemotionPreview({ job }: { job: Job }) {
 
   if (state.kind === "empty") {
     return (
-      <div className="aspect-video bg-neutral-900 rounded flex items-center justify-center text-neutral-500">
-        新增第一個步驟即可預覽
-      </div>
+      <PreviewFrame>
+        <div className="aspect-video flex flex-col items-center justify-center gap-4 text-center px-6">
+          <Clapperboard className="text-faint" size={36} strokeWidth={1.4} />
+          <p className="text-mist text-sm">新增第一個步驟即可預覽</p>
+        </div>
+      </PreviewFrame>
     );
   }
   if (state.kind === "loading") {
     return (
-      <div className="aspect-video bg-neutral-900 rounded flex items-center justify-center text-neutral-500">
-        處理中…
-      </div>
+      <PreviewFrame>
+        <div className="aspect-video flex flex-col items-center justify-center gap-4 text-center px-6">
+          <Loader2 className="text-accent animate-spin" size={32} strokeWidth={1.6} />
+          <p className="meta-mono text-xs uppercase tracking-[0.24em]">Rendering</p>
+        </div>
+      </PreviewFrame>
     );
   }
   if (state.kind === "error") {
     return (
-      <div className="aspect-video bg-neutral-900 rounded flex items-center justify-center text-red-400 p-4 text-center">
-        預覽錯誤：{state.message}
-      </div>
+      <PreviewFrame>
+        <div className="aspect-video flex flex-col items-center justify-center gap-3 text-center px-6 py-4">
+          <AlertTriangle className="text-danger" size={32} strokeWidth={1.6} />
+          <p className="text-danger text-sm max-w-md break-words">
+            預覽錯誤：{state.message}
+          </p>
+        </div>
+      </PreviewFrame>
     );
   }
 
   const { result } = state;
   return (
-    <div className="bg-black rounded overflow-hidden">
-      <Player
-        component={Main}
-        inputProps={result.props}
-        durationInFrames={Math.max(1, result.durationInFrames)}
-        compositionWidth={result.width}
-        compositionHeight={1080}
-        fps={30}
-        controls
-        style={{ width: "100%", aspectRatio: `${result.width} / 1080` }}
-      />
+    <PreviewFrame>
+      <div className="overflow-hidden rounded-[0.625rem] bg-ink-950">
+        <Player
+          component={Main}
+          inputProps={result.props}
+          durationInFrames={Math.max(1, result.durationInFrames)}
+          compositionWidth={result.width}
+          compositionHeight={1080}
+          fps={30}
+          controls
+          style={{ width: "100%", aspectRatio: `${result.width} / 1080` }}
+        />
+      </div>
+    </PreviewFrame>
+  );
+}
+
+function PreviewFrame({ children }: { children: ReactNode }) {
+  return (
+    <div className="panel p-3">
+      <div className="flex items-center gap-2 px-1 pb-3">
+        <span className="size-1.5 rounded-full bg-accent shadow-[0_0_8px_var(--color-accent)]" />
+        <span className="eyebrow">Preview</span>
+      </div>
+      {children}
     </div>
   );
 }

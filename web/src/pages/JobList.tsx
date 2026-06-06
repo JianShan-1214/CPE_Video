@@ -1,8 +1,9 @@
-import { Trash2 } from "lucide-react";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Clapperboard, LogOut, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { apiClient } from "@/lib/api-client";
+import { clearToken, getToken } from "@/lib/auth";
 import type { Job } from "@/lib/draft-types";
-import { deleteJob, listJobs } from "@/lib/storage";
 
 function formatDate(ms: number): string {
   return new Date(ms).toLocaleString("zh-Hant", {
@@ -15,61 +16,94 @@ function formatDate(ms: number): string {
 }
 
 export function JobList() {
-  const [jobs, setJobs] = useState<Job[]>(() => listJobs());
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const navigate = useNavigate();
+  const loggedIn = getToken() !== null;
 
-  const refresh = () => setJobs(listJobs());
+  const refresh = () => {
+    void apiClient.listJobs().then((next) => setJobs(next as Job[]));
+  };
+
+  const handleLogout = () => {
+    clearToken();
+    navigate("/login", { replace: true });
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
 
   const handleDelete = (id: string, name: string) => {
     if (!confirm(`確定刪除「${name}」？此操作無法復原。`)) return;
-    deleteJob(id);
-    refresh();
+    void apiClient.deleteJob(id).then(refresh);
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 p-8">
+    <div className="min-h-screen px-6 py-10 sm:px-10">
       <div className="max-w-5xl mx-auto">
-        <header className="mb-8 flex items-end justify-between">
+        <header className="reveal mb-10 flex items-end justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-semibold">CPE Video Editor</h1>
-            <p className="text-neutral-400 mt-1">
-              {jobs.length === 0 ? "尚無 job" : `共 ${jobs.length} 個 job`}
+            <div className="flex items-center gap-2.5 mb-3">
+              <span className="size-2.5 rounded-sm bg-accent shadow-[0_0_12px_var(--color-accent)]" />
+              <span className="eyebrow">CPE Video Studio</span>
+            </div>
+            <h1 className="text-4xl font-bold tracking-tight">你的影片</h1>
+            <p className="meta-mono text-sm mt-2">
+              {jobs.length === 0 ? "尚無專案" : `${jobs.length} 個專案`}
             </p>
           </div>
-          <Link
-            to="/new"
-            className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded transition-colors"
-          >
-            + 新增 Job
-          </Link>
+          <div className="flex items-center gap-2 shrink-0">
+            {loggedIn && (
+              <button type="button" onClick={handleLogout} className="btn btn-quiet">
+                <LogOut size={15} />
+                登出
+              </button>
+            )}
+            <Link to="/new" className="btn btn-primary">
+              <Plus size={16} />
+              新增 Job
+            </Link>
+          </div>
         </header>
 
         <main>
           {jobs.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-neutral-800 p-12 text-center text-neutral-500">
-              還沒有 job，點右上角「+ 新增 Job」建立第一個。
+            <div className="reveal card flex flex-col items-center justify-center text-center py-20 px-6 border-dashed">
+              <Clapperboard className="text-faint mb-4" size={40} strokeWidth={1.4} />
+              <p className="text-mist">
+                還沒有專案。點右上角{" "}
+                <span className="text-accent font-medium">新增 Job</span> 建立第一支影片。
+              </p>
             </div>
           ) : (
-            <ul className="space-y-2">
-              {jobs.map((job) => (
+            <ul className="stagger space-y-3">
+              {jobs.map((job, i) => (
                 <li
                   key={job.id}
-                  className="bg-neutral-900 rounded-lg p-4 flex items-center justify-between hover:bg-neutral-800 transition-colors"
+                  className="card card-interactive group flex items-center gap-4 p-4"
                 >
                   <Link
                     to={`/jobs/${job.id}/edit`}
-                    className="flex-1 group"
+                    className="flex flex-1 items-center gap-4 min-w-0"
                   >
-                    <div className="font-medium group-hover:text-blue-400">
-                      {job.name}
-                    </div>
-                    <div className="text-xs text-neutral-500 mt-1">
-                      {job.steps.length} 步 · 更新於 {formatDate(job.updatedAt)}
-                    </div>
+                    <span className="grid size-11 shrink-0 place-items-center rounded-lg bg-ink-850 border border-line text-faint transition-colors group-hover:text-accent group-hover:border-line-strong">
+                      <Clapperboard size={20} strokeWidth={1.6} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block font-semibold truncate transition-colors group-hover:text-accent">
+                        {job.name}
+                      </span>
+                      <span className="meta-mono text-xs mt-1 block truncate">
+                        <span className="text-mist">{String(i + 1).padStart(2, "0")}</span>
+                        {"  ·  "}
+                        {job.steps.length} 步 · 更新 {formatDate(job.updatedAt)}
+                      </span>
+                    </span>
                   </Link>
                   <button
                     type="button"
                     onClick={() => handleDelete(job.id, job.name)}
-                    className="text-neutral-500 hover:text-red-400 p-2 rounded transition-colors"
+                    className="text-faint hover:text-danger p-2 rounded-lg transition-colors"
                     aria-label="刪除"
                   >
                     <Trash2 size={18} />

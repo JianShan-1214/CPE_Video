@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiClient } from "./api-client";
 import type { Job } from "./draft-types";
 import { createDebouncedJobSaver } from "./debounced-job-saver";
-import { getJob, saveJob } from "./storage";
 
 export type JobUpdater = (prev: Job) => Job;
 
@@ -14,20 +14,38 @@ export function useJob(id: string | undefined) {
   const saverRef = useRef(
     createDebouncedJobSaver({
       delayMs: SAVE_DEBOUNCE_MS,
-      save: saveJob,
+      save: (job) => {
+        void apiClient.updateJob(job.id, job);
+      },
       setSaving,
     }),
   );
 
   useEffect(() => {
     saverRef.current.flush();
+    let cancelled = false;
+    setLoaded(false);
     if (!id) {
       setJobState(null);
       setLoaded(true);
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
-    setJobState(getJob(id));
-    setLoaded(true);
+    apiClient
+      .getJob(id)
+      .then((loadedJob) => {
+        if (!cancelled) setJobState(loadedJob);
+      })
+      .catch(() => {
+        if (!cancelled) setJobState(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   useEffect(() => {

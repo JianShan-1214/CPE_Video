@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { AnnotationJSON, HighlightPreset } from "@remotion-src/config-types";
 import { HIGHLIGHT_PRESETS } from "@remotion-src/config-types";
-import { Plus, Trash2 } from "lucide-react";
+import { Highlighter, MessageSquareText, Plus, Trash2 } from "lucide-react";
 import type { DraftStep } from "@/lib/draft-types";
 
 const HIGHLIGHT_COLOR_OPTIONS: (HighlightPreset | "none")[] = [
@@ -86,13 +86,13 @@ export function StepEditor({ step, onChange }: Props) {
   };
 
   return (
-    <div className="space-y-3 text-sm">
+    <div className="space-y-4 text-sm">
       <Field label="標籤 (label)">
         <input
           type="text"
           value={step.label}
           onChange={(e) => patch({ label: e.target.value })}
-          className={inputCls}
+          className="input"
         />
       </Field>
 
@@ -103,7 +103,7 @@ export function StepEditor({ step, onChange }: Props) {
             step="0.1"
             value={step.from}
             onChange={(e) => patch({ from: Number(e.target.value) })}
-            className={inputCls}
+            className="input font-mono"
           />
         </Field>
         <Field label="to (秒)">
@@ -112,7 +112,7 @@ export function StepEditor({ step, onChange }: Props) {
             step="0.1"
             value={step.to}
             onChange={(e) => patch({ to: Number(e.target.value) })}
-            className={inputCls}
+            className="input font-mono"
           />
         </Field>
       </div>
@@ -123,7 +123,7 @@ export function StepEditor({ step, onChange }: Props) {
           value={step.fileLabel}
           onChange={(e) => patch({ fileLabel: e.target.value })}
           placeholder="code01.cpp"
-          className={inputCls}
+          className="input font-mono"
         />
       </Field>
 
@@ -132,7 +132,7 @@ export function StepEditor({ step, onChange }: Props) {
           value={step.subtitle}
           onChange={(e) => patch({ subtitle: e.target.value })}
           rows={2}
-          className={inputCls}
+          className="input resize-y"
         />
       </Field>
 
@@ -141,7 +141,7 @@ export function StepEditor({ step, onChange }: Props) {
           value={step.fileContent}
           onChange={(e) => patch({ fileContent: e.target.value })}
           rows={10}
-          className={`${inputCls} font-mono text-xs`}
+          className="input resize-y font-mono text-xs leading-relaxed"
           spellCheck={false}
         />
       </Field>
@@ -156,16 +156,20 @@ export function StepEditor({ step, onChange }: Props) {
             patch({ focusLine: v === "" ? undefined : Number(v) });
           }}
           placeholder="(未設定)"
-          className={inputCls}
+          className="input font-mono"
         />
       </Field>
 
-      <Field label="Highlight">
+      <section className="rounded-xl border border-line bg-ink-900/60 p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Highlighter size={13} className="text-faint" strokeWidth={1.8} />
+          <span className="eyebrow">Highlight</span>
+        </div>
         <div className="space-y-2">
           <select
             value={currentColor}
             onChange={(e) => setHighlightColor(e.target.value)}
-            className={inputCls}
+            className="input"
           >
             {HIGHLIGHT_COLOR_OPTIONS.map((c) => (
               <option key={c} value={c}>
@@ -175,42 +179,53 @@ export function StepEditor({ step, onChange }: Props) {
           </select>
           {step.highlight && (
             <div className="grid grid-cols-2 gap-2">
-              <input
-                type="number"
-                min={1}
-                value={step.highlight.startLine}
-                onChange={(e) =>
-                  setHighlightRange("startLine", Number(e.target.value))
-                }
-                placeholder="startLine"
-                className={inputCls}
-              />
-              <input
-                type="number"
-                min={1}
-                value={step.highlight.endLine}
-                onChange={(e) =>
-                  setHighlightRange("endLine", Number(e.target.value))
-                }
-                placeholder="endLine"
-                className={inputCls}
-              />
+              <div>
+                <span className="field-label">起始行</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={step.highlight.startLine}
+                  onChange={(e) =>
+                    setHighlightRange("startLine", Number(e.target.value))
+                  }
+                  placeholder="startLine"
+                  className="input font-mono"
+                />
+              </div>
+              <div>
+                <span className="field-label">結束行</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={step.highlight.endLine}
+                  onChange={(e) =>
+                    setHighlightRange("endLine", Number(e.target.value))
+                  }
+                  placeholder="endLine"
+                  className="input font-mono"
+                />
+              </div>
             </div>
           )}
         </div>
-      </Field>
+      </section>
 
-      <Field label="Annotations">
+      <section className="rounded-xl border border-line bg-ink-900/60 p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <MessageSquareText size={13} className="text-faint" strokeWidth={1.8} />
+          <span className="eyebrow">Annotations</span>
+          <span className="meta-mono text-xs ml-auto">{annotations.length}</span>
+        </div>
         <div className="space-y-2">
           {annotations.length === 0 ? (
-            <div className="text-xs text-neutral-500 border border-dashed border-neutral-800 rounded px-3 py-3">
+            <div className="text-xs text-faint border border-dashed border-line rounded-lg px-3 py-4 text-center">
               尚無標注。
             </div>
           ) : (
             annotations.map((ann, i) => (
               <div
                 key={i}
-                className="grid grid-cols-[72px_88px_1fr_84px_32px] gap-2 items-start"
+                className="grid grid-cols-[72px_88px_1fr_84px_32px] gap-2 items-center"
               >
                 <input
                   type="number"
@@ -221,7 +236,7 @@ export function StepEditor({ step, onChange }: Props) {
                       targetLine: Number(e.target.value),
                     })
                   }
-                  className={inputCls}
+                  className="input font-mono"
                   aria-label={`標注 ${i + 1} 行號`}
                 />
                 <input
@@ -234,14 +249,14 @@ export function StepEditor({ step, onChange }: Props) {
                       startTime: Number(e.target.value),
                     })
                   }
-                  className={inputCls}
+                  className="input font-mono"
                   aria-label={`標注 ${i + 1} 開始秒數`}
                 />
                 <input
                   type="text"
                   value={ann.text}
                   onChange={(e) => updateAnnotation(i, { text: e.target.value })}
-                  className={inputCls}
+                  className="input"
                   aria-label={`標注 ${i + 1} 文字`}
                   placeholder="標注文字"
                 />
@@ -255,7 +270,7 @@ export function StepEditor({ step, onChange }: Props) {
                           : (e.target.value as AnnotationJSON["theme"]),
                     })
                   }
-                  className={inputCls}
+                  className="input"
                   aria-label={`標注 ${i + 1} 顏色`}
                 >
                   {ANNOTATION_THEME_OPTIONS.map((theme) => (
@@ -267,7 +282,7 @@ export function StepEditor({ step, onChange }: Props) {
                 <button
                   type="button"
                   onClick={() => removeAnnotation(i)}
-                  className="text-neutral-500 hover:text-red-400 p-2"
+                  className="grid size-8 place-items-center rounded-lg text-faint hover:text-danger hover:bg-ink-850 transition-colors"
                   aria-label={`刪除標注 ${i + 1}`}
                 >
                   <Trash2 size={14} />
@@ -278,18 +293,15 @@ export function StepEditor({ step, onChange }: Props) {
           <button
             type="button"
             onClick={addAnnotation}
-            className="text-blue-400 hover:text-blue-300 text-sm flex items-center gap-1"
+            className="btn btn-ghost w-full"
           >
             <Plus size={14} /> 新增標注
           </button>
         </div>
-      </Field>
+      </section>
     </div>
   );
 }
-
-const inputCls =
-  "w-full bg-neutral-900 border border-neutral-800 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500";
 
 function Field({
   label,
@@ -300,7 +312,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="text-xs text-neutral-400 mb-1 block">{label}</span>
+      <span className="field-label">{label}</span>
       {children}
     </label>
   );

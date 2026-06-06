@@ -1,3 +1,4 @@
+import { Film } from "lucide-react";
 import { useState } from "react";
 import type { Job } from "@/lib/draft-types";
 import { normalizeFolderName } from "@/lib/export-files";
@@ -24,7 +25,7 @@ export function ExportDialog({ job, open, onClose }: Props) {
     setError(null);
     setBusy(true);
     try {
-      const blob = await renderMp4({ job, folderName });
+      const blob = await renderMp4({ jobId: job.id, folderName });
       const normalizedFolder = normalizeFolderName(folderName, job.name);
       triggerMp4Download(blob, `${normalizedFolder}.mp4`);
       onClose();
@@ -37,60 +38,68 @@ export function ExportDialog({ job, open, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div
-        className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 max-w-md w-full"
+        className="reveal panel p-6 max-w-md w-full"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-semibold mb-4">匯出 MP4</h2>
+        <div className="flex items-center gap-3 mb-5">
+          <span className="grid size-9 place-items-center rounded-lg bg-accent-soft border border-line text-accent">
+            <Film size={18} strokeWidth={1.7} />
+          </span>
+          <h2 className="text-lg font-semibold">匯出 MP4</h2>
+        </div>
 
         <label className="block mb-4">
-          <span className="text-xs text-neutral-400 mb-1 block">
+          <span className="field-label">
             影片名稱（輸出為 {normalizeFolderName(folderName, job.name)}.mp4）
           </span>
           <input
             type="text"
             value={folderName}
             onChange={(e) => setFolderName(e.target.value)}
-            className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+            className="input font-mono"
           />
         </label>
 
-        <div className="text-xs text-neutral-500 mb-4 space-y-1">
-          <div>步驟數：{job.steps.length}</div>
-          <div>
-            cpp 檔（dedupe）：
-            {new Set(job.steps.map((s) => s.fileLabel)).size} 個
-          </div>
-          <div>Render 會使用本機 Remotion CLI，過程可能需要一段時間。</div>
+        <div className="rounded-lg border border-line bg-ink-950/40 p-3 mb-4 space-y-1.5">
+          <Stat label="步驟數" value={`${job.steps.length}`} />
+          <Stat
+            label="cpp 檔（dedupe）"
+            value={`${new Set(job.steps.map((s) => s.fileLabel)).size} 個`}
+          />
+          <p className="text-xs text-faint pt-1">
+            Render 會使用本機 Remotion CLI，過程可能需要一段時間。
+          </p>
         </div>
 
-        {error && (
-          <div className="bg-red-950/50 border border-red-900/50 text-red-300 rounded px-3 py-2 text-sm mb-4">
-            {error}
-          </div>
-        )}
+        {error && <div className="error-banner mb-4">{error}</div>}
 
         <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-3 py-1.5 text-sm text-neutral-400 hover:text-neutral-200"
-          >
+          <button type="button" onClick={onClose} className="btn btn-quiet">
             取消
           </button>
           <button
             type="button"
             onClick={handleExport}
             disabled={busy || job.steps.length === 0}
-            className="bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-800 disabled:text-neutral-500 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded text-sm transition-colors"
+            className="btn btn-primary px-3 py-2 text-sm"
           >
             {busy ? "Render 中…" : "匯出 MP4"}
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between text-xs">
+      <span className="text-mist">{label}</span>
+      <span className="meta-mono text-paper">{value}</span>
     </div>
   );
 }

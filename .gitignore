@@ -2,6 +2,10 @@ node_modules
 dist
 build
 *.tsbuildinfo
+__pycache__/
+.pytest_cache/
+.venv/
+backend/data/*.db
 .DS_Store
 .env
 

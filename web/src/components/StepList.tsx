@@ -50,24 +50,26 @@ export function StepList({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-neutral-400">
-          Steps ({steps.length})
-        </h2>
+        <span className="eyebrow">Steps · {steps.length}</span>
         <button
           type="button"
           onClick={onAdd}
-          className="text-blue-400 hover:text-blue-300 text-sm flex items-center gap-1"
+          className="btn btn-quiet text-xs"
         >
           <Plus size={14} /> 新增
         </button>
       </div>
 
       {steps.length === 0 ? (
-        <div className="text-xs text-neutral-500 italic px-2 py-3">
-          尚無步驟，點上方新增。
-        </div>
+        <button
+          type="button"
+          onClick={onAdd}
+          className="w-full rounded-xl border border-dashed border-line px-3 py-6 text-center text-xs text-faint transition-colors hover:border-accent hover:text-accent"
+        >
+          尚無步驟，點此新增。
+        </button>
       ) : (
         <DndContext
           sensors={sensors}
@@ -132,26 +134,38 @@ function SortableStepItem({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition-colors",
+        "group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer border transition-colors",
         selected
-          ? "bg-blue-600/20 border border-blue-500/40"
-          : "bg-neutral-900 border border-transparent hover:bg-neutral-800",
+          ? "border-accent bg-accent-soft"
+          : "border-transparent bg-ink-900 hover:bg-ink-850 hover:border-line",
         isDragging && "opacity-60",
       )}
       onClick={() => onSelect(index)}
     >
       <button
         type="button"
-        className="text-neutral-600 hover:text-neutral-300 cursor-grab active:cursor-grabbing p-0.5"
+        className="text-faint hover:text-mist cursor-grab active:cursor-grabbing p-0.5"
         aria-label="拖曳排序"
         {...attributes}
         {...listeners}
       >
         <GripVertical size={14} />
       </button>
-      <span className="text-xs text-neutral-500 w-6 shrink-0">{index + 1}.</span>
-      <span className="flex-1 truncate text-sm">
-        {step.label || <span className="text-neutral-500">(未命名)</span>}
+      <span
+        className={cn(
+          "meta-mono w-6 shrink-0 text-xs",
+          selected ? "text-accent" : "text-faint",
+        )}
+      >
+        {String(index + 1).padStart(2, "0")}
+      </span>
+      <span
+        className={cn(
+          "flex-1 truncate text-sm transition-colors",
+          selected ? "text-paper" : "text-mist group-hover:text-paper",
+        )}
+      >
+        {step.label || <span className="text-faint">(未命名)</span>}
       </span>
       <button
         type="button"
@@ -159,7 +173,7 @@ function SortableStepItem({
           e.stopPropagation();
           if (confirm(`刪除步驟「${step.label}」？`)) onDelete(index);
         }}
-        className="text-neutral-500 hover:text-red-400 p-1"
+        className="text-faint hover:text-danger p-1"
         aria-label="刪除步驟"
       >
         <Trash2 size={14} />

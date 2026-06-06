@@ -1,3 +1,4 @@
+import { ArrowLeft, Film } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ExportDialog } from "@/components/ExportDialog";
@@ -36,11 +37,14 @@ export function JobEdit() {
   if (!loaded) return null;
   if (!job) {
     return (
-      <div className="min-h-screen bg-neutral-950 text-neutral-100 p-8">
-        <p>找不到 job（id: {id}）。</p>
-        <Link to="/" className="text-blue-400 hover:underline">
-          ← 返回列表
-        </Link>
+      <div className="min-h-screen grid place-items-center p-8 text-center">
+        <div className="reveal">
+          <p className="text-mist mb-3">找不到 job（id: {id}）。</p>
+          <Link to="/" className="btn btn-ghost">
+            <ArrowLeft size={15} />
+            返回列表
+          </Link>
+        </div>
       </div>
     );
   }
@@ -86,7 +90,7 @@ export function JobEdit() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col">
+    <div className="min-h-screen flex flex-col">
       <Header
         job={job}
         saving={saving}
@@ -100,7 +104,7 @@ export function JobEdit() {
       />
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-0 overflow-hidden">
-        <aside className="border-r border-neutral-900 p-4 overflow-y-auto space-y-6">
+        <aside className="border-r border-line p-5 overflow-y-auto space-y-6">
           <StepList
             steps={job.steps}
             selectedIndex={selectedIndex}
@@ -111,10 +115,8 @@ export function JobEdit() {
           />
 
           {selectedStep && selectedIndex !== null && (
-            <div className="border-t border-neutral-900 pt-4">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-400 mb-3">
-                Step #{selectedIndex + 1} 編輯
-              </h3>
+            <div className="border-t border-line pt-5">
+              <h3 className="eyebrow mb-4">Step #{selectedIndex + 1} 編輯</h3>
               <StepEditor
                 step={selectedStep}
                 onChange={(next) => handleStepChange(selectedIndex, next)}
@@ -123,11 +125,11 @@ export function JobEdit() {
           )}
         </aside>
 
-        <main className="p-4 overflow-y-auto">
+        <main className="p-5 overflow-y-auto">
           {previewJob ? (
             <RemotionPreview job={previewJob} />
           ) : (
-            <div className="aspect-video bg-neutral-900 rounded" />
+            <div className="aspect-video panel" />
           )}
         </main>
       </div>
@@ -163,28 +165,33 @@ function Header({
   onExport: () => void;
 }) {
   return (
-    <header className="border-b border-neutral-900 p-3 flex items-center gap-4">
-      <Link
-        to="/"
-        className="text-neutral-400 hover:text-neutral-200 text-sm shrink-0"
-      >
-        ← 列表
+    <header className="border-b border-line px-4 py-3 flex items-center gap-3 sticky top-0 z-20 bg-ink-950/80 backdrop-blur-md">
+      <Link to="/" className="btn btn-quiet shrink-0">
+        <ArrowLeft size={15} />
+        列表
       </Link>
+      <div className="h-5 w-px bg-line shrink-0" />
       <input
         type="text"
         value={job.name}
         onChange={(e) => onNameChange(e.target.value)}
-        className="bg-transparent border-none outline-none text-lg font-semibold flex-1 focus:bg-neutral-900 rounded px-2 py-1"
+        className="bg-transparent border border-transparent outline-none text-lg font-semibold flex-1 min-w-0 focus:border-line focus:bg-ink-900 rounded-lg px-2 py-1 transition-colors"
       />
-      <span className="text-xs text-neutral-500 shrink-0">
-        {saving ? "儲存中…" : "已儲存"}
+      <span className="flex items-center gap-2 shrink-0">
+        <span
+          className={`size-2 rounded-full transition-colors ${
+            saving ? "bg-accent animate-pulse" : "bg-faint"
+          }`}
+        />
+        <span className="meta-mono text-xs">{saving ? "儲存中" : "已儲存"}</span>
       </span>
       <button
         type="button"
         onClick={onExport}
         disabled={job.steps.length === 0}
-        className="bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-800 disabled:text-neutral-500 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded text-sm transition-colors"
+        className="btn btn-primary shrink-0 px-3 py-2 text-sm"
       >
+        <Film size={15} />
         匯出 MP4
       </button>
     </header>

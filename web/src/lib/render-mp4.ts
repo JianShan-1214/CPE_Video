@@ -1,29 +1,33 @@
-import type { Job } from "./draft-types";
+import { apiClient } from "./api-client";
 
 export type RenderMp4Input = {
-  job: Job;
+  jobId: string;
   folderName: string;
 };
 
+const POLL_INTERVAL_MS = 1000;
+const POLL_TIMEOUT_MS = 30 * 60 * 1000;
+
 export async function renderMp4(input: RenderMp4Input): Promise<Blob> {
-  const response = await fetch("/api/render-mp4", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+  const renderJob = await apiClient.createRenderJob({
+    jobId: input.jobId,
+    folderName: input.folderName,
   });
 
-  if (!response.ok) {
-    let message = `MP4 render failed (${response.status})`;
-    try {
-      const body = (await response.json()) as { error?: string };
-      if (body.error) message = body.error;
-    } catch {
-      // Keep default message when the server did not return JSON.
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
+  for (;;) {
+    const status = await apiClient.getRenderJob(renderJob.id);
+    if (status.status === "succeeded") {
+      return apiClient.downloadRenderJob(renderJob.id);
     }
-    throw new Error(message);
+    if (status.status === "failed") {
+      throw new Error(status.error ?? "MP4 render failed");
+    }
+    if (Date.now() > deadline) {
+      throw new Error("Render 等待逾時，請稍後再試或查看後端記錄。");
+    }
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }
-
-  return response.blob();
 }
 
 export function triggerMp4Download(blob: Blob, filename: string): void {

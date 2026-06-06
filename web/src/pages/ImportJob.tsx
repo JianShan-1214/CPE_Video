@@ -1,10 +1,7 @@
+import { ArrowLeft, Upload } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { importFromConfig } from "@/lib/import-config";
-import { saveJob } from "@/lib/storage";
-
-const inputCls =
-  "w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500";
+import { apiClient } from "@/lib/api-client";
 
 function Field({
   label,
@@ -15,7 +12,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="text-xs text-neutral-400 mb-1 block">{label}</span>
+      <span className="field-label">{label}</span>
       {children}
     </label>
   );
@@ -37,17 +34,12 @@ export function ImportJob() {
       for (const file of files) {
         cppFiles[file.name] = await file.text();
       }
-      const result = importFromConfig({
+      const job = await apiClient.importJob({
         configJson: configText,
         cppFiles,
         name: name.trim() || undefined,
       });
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      saveJob(result.job);
-      navigate(`/jobs/${result.job.id}/edit`);
+      navigate(`/jobs/${job.id}/edit`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -56,28 +48,31 @@ export function ImportJob() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 p-8">
-      <div className="max-w-3xl mx-auto">
+    <div className="min-h-screen px-6 py-10 sm:px-10">
+      <div className="max-w-3xl mx-auto reveal">
         <header className="mb-8">
-          <Link
-            to="/new"
-            className="text-neutral-400 hover:text-neutral-200 text-sm"
-          >
-            ← 返回
+          <Link to="/new" className="btn btn-quiet -ml-2 mb-4">
+            <ArrowLeft size={15} />
+            返回
           </Link>
-          <h1 className="text-3xl font-semibold mt-2">匯入既有 config</h1>
-          <p className="text-neutral-400 mt-2 text-sm">
+          <div className="flex items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-xl bg-ink-850 border border-line text-faint">
+              <Upload size={20} strokeWidth={1.7} />
+            </span>
+            <h1 className="text-3xl font-bold tracking-tight">匯入既有 config</h1>
+          </div>
+          <p className="text-mist mt-3 text-sm">
             貼上 config.json 內容並上傳對應的 cpp 檔。
           </p>
         </header>
 
-        <main className="space-y-4">
-          <Field label="Job 名稱（可空，預設 “Imported Job”）">
+        <main className="space-y-5">
+          <Field label="Job 名稱（可空，預設 Imported Job）">
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className={inputCls}
+              className="input"
               placeholder="e.g. 25B4 Blocks"
             />
           </Field>
@@ -87,7 +82,7 @@ export function ImportJob() {
               value={configText}
               onChange={(e) => setConfigText(e.target.value)}
               rows={12}
-              className={`${inputCls} font-mono text-xs`}
+              className="input resize-y font-mono text-xs leading-relaxed"
               placeholder='{"steps": [ ... ]}'
               spellCheck={false}
             />
@@ -99,27 +94,26 @@ export function ImportJob() {
               multiple
               accept=".cpp"
               onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-              className="block text-sm file:mr-3 file:py-2 file:px-3 file:rounded file:border-0 file:bg-neutral-800 file:text-neutral-200 hover:file:bg-neutral-700"
+              className="block w-full text-sm text-mist file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border file:border-line file:bg-ink-850 file:text-paper file:cursor-pointer hover:file:border-line-strong file:transition-colors"
             />
             {files.length > 0 && (
-              <div className="text-xs text-neutral-500 mt-2">
-                已選 {files.length} 個檔：
-                {files.map((f) => f.name).join(", ")}
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {files.map((f) => (
+                  <span key={f.name} className="chip">
+                    {f.name}
+                  </span>
+                ))}
               </div>
             )}
           </Field>
 
-          {error && (
-            <div className="bg-red-950/50 border border-red-900/50 text-red-300 rounded px-3 py-2 text-sm">
-              {error}
-            </div>
-          )}
+          {error && <div className="error-banner">{error}</div>}
 
           <button
             type="button"
             onClick={handleSubmit}
             disabled={busy || !configText.trim() || files.length === 0}
-            className="bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-800 disabled:text-neutral-500 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-colors"
+            className="btn btn-primary"
           >
             {busy ? "匯入中…" : "匯入並進入編輯"}
           </button>
