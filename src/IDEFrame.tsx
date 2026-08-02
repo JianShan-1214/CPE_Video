@@ -1,4 +1,5 @@
 import React from "react";
+import { useThemeColors } from "./calculate-metadata/theme";
 
 export const TITLE_BAR_HEIGHT = 40;
 export const TAB_BAR_HEIGHT = 30;
@@ -27,10 +28,18 @@ export const IDEFrame: React.FC<{
   filename: string;
   children: React.ReactNode;
 }> = ({ filename, children }) => {
+  // The window chrome follows the selected code theme, otherwise picking a
+  // theme in the editor would only recolour the tokens and leave a
+  // github-dark shell around them.
+  const colors = useThemeColors();
+  const editorBg = colors.editor.background;
+  const chromeBg = colors.editorGroupHeader.tabsBackground;
+  const border = `1px solid ${colors.editorGroup.border}`;
+
   const outerStyle: React.CSSProperties = {
     position: "absolute",
     inset: 0,
-    backgroundColor: "#020409",
+    backgroundColor: chromeBg,
   };
 
   const windowStyle: React.CSSProperties = {
@@ -41,20 +50,20 @@ export const IDEFrame: React.FC<{
     boxShadow: "0 16px 60px rgba(0,0,0,0.8)",
     display: "flex",
     flexDirection: "column",
-    backgroundColor: "#0d1117",
-    border: "1px solid #30363d",
+    backgroundColor: editorBg,
+    border,
   };
 
   const titleBarStyle: React.CSSProperties = {
     height: TITLE_BAR_HEIGHT,
-    backgroundColor: "#1c2128",
+    backgroundColor: chromeBg,
     display: "flex",
     alignItems: "center",
     padding: "0 16px",
     gap: 7,
     flexShrink: 0,
     position: "relative",
-    borderBottom: "1px solid #30363d",
+    borderBottom: border,
   };
 
   const titleTextStyle: React.CSSProperties = {
@@ -62,7 +71,7 @@ export const IDEFrame: React.FC<{
     left: 0,
     right: 0,
     textAlign: "center",
-    color: "#8b949e",
+    color: colors.editorLineNumber.foreground,
     fontSize: 15,
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     pointerEvents: "none",
@@ -70,11 +79,11 @@ export const IDEFrame: React.FC<{
 
   const tabBarStyle: React.CSSProperties = {
     height: TAB_BAR_HEIGHT,
-    backgroundColor: "#161b22",
+    backgroundColor: chromeBg,
     display: "flex",
     alignItems: "flex-end",
     flexShrink: 0,
-    borderBottom: "1px solid #30363d",
+    borderBottom: border,
   };
 
   const tabStyle: React.CSSProperties = {
@@ -82,11 +91,11 @@ export const IDEFrame: React.FC<{
     padding: "0 18px",
     display: "flex",
     alignItems: "center",
-    backgroundColor: "#0d1117",
-    color: "#e6edf3",
+    backgroundColor: colors.tab.activeBackground,
+    color: colors.tab.activeForeground,
     fontSize: 16,
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    borderRight: "1px solid #30363d",
+    borderRight: border,
     borderTop: "2px solid #f78166",
     borderTopLeftRadius: 3,
     borderTopRightRadius: 3,
