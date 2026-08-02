@@ -5,6 +5,7 @@ import { ExportDialog } from "@/components/ExportDialog";
 import { RemotionPreview } from "@/components/RemotionPreview";
 import { StepEditor } from "@/components/StepEditor";
 import { StepList } from "@/components/StepList";
+import { VideoSettings } from "@/components/VideoSettings";
 import type { DraftStep, Job } from "@/lib/draft-types";
 import { reorderSteps } from "@/lib/step-order";
 import { useDebouncedValue, useJob } from "@/lib/use-job";
@@ -105,6 +106,12 @@ export function JobEdit() {
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-0 overflow-hidden">
         <aside className="border-r border-line p-5 overflow-y-auto space-y-6">
+          <VideoSettings
+            theme={job.theme}
+            width={job.width}
+            onChange={(patch) => update((prev) => ({ ...prev, ...patch }))}
+          />
+
           <StepList
             steps={job.steps}
             selectedIndex={selectedIndex}

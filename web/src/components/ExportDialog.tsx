@@ -1,8 +1,16 @@
 import { Film } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { RenderJob } from "@/lib/api-client";
 import type { Job } from "@/lib/draft-types";
 import { normalizeFolderName } from "@/lib/export-files";
 import { renderMp4, triggerMp4Download } from "@/lib/render-mp4";
+
+const STATUS_LABEL: Record<RenderJob["status"], string> = {
+  queued: "排隊中",
+  running: "Render 中",
+  succeeded: "完成，下載中",
+  failed: "失敗",
+};
 
 type Props = {
   job: Job;
@@ -17,15 +25,30 @@ function toKebab(input: string): string {
 export function ExportDialog({ job, open, onClose }: Props) {
   const [folderName, setFolderName] = useState(() => toKebab(job.name));
   const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<RenderJob["status"] | null>(null);
+  const [elapsedSec, setElapsedSec] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  // A render takes minutes; without a ticking clock the dialog looks frozen.
+  useEffect(() => {
+    if (!busy) return;
+    setElapsedSec(0);
+    const started = Date.now();
+    const timer = setInterval(
+      () => setElapsedSec(Math.floor((Date.now() - started) / 1000)),
+      1000,
+    );
+    return () => clearInterval(timer);
+  }, [busy]);
 
   if (!open) return null;
 
   const handleExport = async () => {
     setError(null);
+    setStatus(null);
     setBusy(true);
     try {
-      const blob = await renderMp4({ jobId: job.id, folderName });
+      const blob = await renderMp4({ jobId: job.id, folderName }, setStatus);
       const normalizedFolder = normalizeFolderName(folderName, job.name);
       triggerMp4Download(blob, `${normalizedFolder}.mp4`);
       onClose();
@@ -70,10 +93,20 @@ export function ExportDialog({ job, open, onClose }: Props) {
             label="cpp 檔（dedupe）"
             value={`${new Set(job.steps.map((s) => s.fileLabel)).size} 個`}
           />
+          <Stat label="主題 / 寬度" value={`${job.theme} · ${job.width.type === "auto" ? "auto" : `${job.width.value}px`}`} />
           <p className="text-xs text-faint pt-1">
-            Render 會使用本機 Remotion CLI，過程可能需要一段時間。
+            伺服器會用 Remotion 逐格算圖，數分鐘不等。未設定語音金鑰時會輸出無旁白版本。
           </p>
         </div>
+
+        {busy && (
+          <div className="rounded-lg border border-line bg-ink-950/40 p-3 mb-4 flex items-center justify-between text-xs">
+            <span className="text-mist">
+              {status ? STATUS_LABEL[status] : "送出中"}…
+            </span>
+            <span className="meta-mono text-paper">{elapsedSec}s</span>
+          </div>
+        )}
 
         {error && <div className="error-banner mb-4">{error}</div>}
 
