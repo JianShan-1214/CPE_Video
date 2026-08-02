@@ -43,6 +43,20 @@ def build_render_files(job: JobResponse, folder_name: str | None) -> tuple[str, 
     return normalized, json.dumps({"steps": config_steps}, ensure_ascii=False, indent=2), cpp_files
 
 
+def build_render_props(job: JobResponse, render_folder: str) -> dict:
+    """Input props for ``remotion render``.
+
+    Without ``theme``/``width`` the composition falls back to ``Root.tsx``
+    defaults, so the settings picked in the web editor would be silently
+    dropped from the exported MP4.
+    """
+    return {
+        "folder": render_folder,
+        "theme": job.theme,
+        "width": job.width.model_dump(),
+    }
+
+
 async def create_render_job(
     session: AsyncSession,
     job_id: str,
@@ -165,7 +179,7 @@ async def run_render_job(
                 "Main",
                 str(output_path),
                 "--props",
-                json.dumps({"folder": render_folder}),
+                json.dumps(build_render_props(job, render_folder)),
                 "--overwrite",
                 cwd=project_root,
                 stderr=asyncio.subprocess.PIPE,

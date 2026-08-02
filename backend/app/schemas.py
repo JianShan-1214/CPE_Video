@@ -5,7 +5,32 @@ from pydantic import BaseModel, ConfigDict, Field
 
 HighlightPreset = Literal["blue", "yellow", "red", "green", "lightblue"]
 AnnotationTheme = Literal["blue", "yellow", "green", "red"]
-Theme = Literal["github-dark", "github-light", "material-darker", "monokai", "nord", "poimandres"]
+# Keep in sync with ``themeSchema`` in src/calculate-metadata/theme.tsx — the
+# editor's theme picker offers every value listed there.
+Theme = Literal[
+    "dark-plus",
+    "dracula-soft",
+    "dracula",
+    "github-dark",
+    "github-dark-dimmed",
+    "github-light",
+    "light-plus",
+    "material-darker",
+    "material-default",
+    "material-lighter",
+    "material-ocean",
+    "material-palenight",
+    "min-dark",
+    "min-light",
+    "monokai",
+    "nord",
+    "one-dark-pro",
+    "poimandres",
+    "slack-dark",
+    "slack-ochin",
+    "solarized-dark",
+    "solarized-light",
+]
 RenderStatus = Literal["queued", "running", "succeeded", "failed"]
 
 
