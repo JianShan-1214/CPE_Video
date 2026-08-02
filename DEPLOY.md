@@ -20,9 +20,9 @@ CPE Video 以**單一 Docker image** 上線：FastAPI 後端同時提供 API、�
 |------|------|------|------|
 | `AUTH_PASSWORD` | 建議 | （空＝不啟用登入） | 共用存取密碼。設了之後所有 `/api` 都需登入。 |
 | `OPENAI_API_KEY` | 是 | — | 沒設會 fallback 到 mock 生成（罐頭文字）。 |
-| `OPENAI_MODEL` | 否 | `gpt-4o-mini` | 想要更好品質可設 `gpt-4o`。 |
-| `GOOGLE_APPLICATION_CREDENTIALS_JSON` | 語音需要 | — | GCP 服務帳戶金鑰的**完整 JSON 內容**；啟動時會寫成檔案。 |
-| `GOOGLE_APPLICATION_CREDENTIALS` | 語音需要（本機） | — | 金鑰**檔案路徑**（本機 .env 用這個；雲端用上面的 JSON 版）。 |
+| `OPENAI_MODEL` | 否 | `gpt-5.6-luna` | 換模型才需設。請求不帶 `temperature`（新模型只接受預設值）。 |
+| `GOOGLE_APPLICATION_CREDENTIALS_JSON` | 否（想要語音才需要） | — | GCP 服務帳戶金鑰的**完整 JSON 內容**；啟動時會寫成檔案。 |
+| `GOOGLE_APPLICATION_CREDENTIALS` | 否（想要語音才需要，本機） | — | 金鑰**檔案路徑**（本機 .env 用這個；雲端用上面的 JSON 版）。 |
 | `RENDER_REQUIRE_AUDIO` | 否 | `false` | `true` 時語音失敗就讓 render 失敗；預設失敗則 render 無聲版。 |
 | `RENDER_TIMEOUT_SEC` | 否 | `1800` | 單支 render 逾時秒數。 |
 | `DATA_DIR` | 雲端建議 | `backend/data` | SQLite 與金鑰檔位置；雲端請指到 volume。 |
@@ -34,6 +34,14 @@ CPE Video 以**單一 Docker image** 上線：FastAPI 後端同時提供 API、�
 
 > **金鑰安全**：`.env`、`*.mp4`、`node_modules` 等都在 `.dockerignore` 內，不會打包進 image。
 > 雲端金鑰一律走 Zeabur 環境變數，不要 commit。
+
+### 先不做 TTS 的話
+
+完全不用設 GCP 金鑰。沒有金鑰時 render 會直接跳過語音，輸出**無旁白影片**，
+其餘功能（編輯、預覽、主題／寬度設定、匯出 MP4）都完整可用。
+之後想加語音，補上 `GOOGLE_APPLICATION_CREDENTIALS_JSON` 重新部署即可，不需改程式。
+
+`RENDER_REQUIRE_AUDIO` 保持預設 `false`；設成 `true` 才會在缺語音時讓 render 失敗。
 
 ---
 
@@ -48,10 +56,11 @@ CPE Video 以**單一 Docker image** 上線：FastAPI 後端同時提供 API、�
    ```
    AUTH_PASSWORD=<你們的共用密碼>
    OPENAI_API_KEY=sk-...
-   OPENAI_MODEL=gpt-4o-mini
-   GOOGLE_APPLICATION_CREDENTIALS_JSON={"type":"service_account",...}   ← 整段貼上
+   OPENAI_MODEL=gpt-5.6-luna
    DATA_DIR=/data/db
    OUTPUT_DIR=/data/out
+   # 想要語音旁白才加這行（整段 JSON 貼上）；先跳過 TTS 就不用設：
+   # GOOGLE_APPLICATION_CREDENTIALS_JSON={"type":"service_account",...}
    ```
 5. **產生網域**：在 Networking 產生一個 `*.zeabur.app` 網域（自動 HTTPS），或綁自訂網域。
 6. **開網站**：開網域 → 輸入 `AUTH_PASSWORD` 登入 → 開始用。
