@@ -310,11 +310,12 @@ class OpenAIGeneratorProvider:
         last_error: Exception | None = None
         for _attempt in range(2):
             try:
+                # No temperature: newer models reject anything but the default,
+                # and the JSON schema in the prompt already pins the output shape.
                 response = await client.chat.completions.create(
                     model=self._model,
                     messages=messages,
                     response_format={"type": "json_object"},
-                    temperature=0.4,
                 )
             except Exception as exc:  # noqa: BLE001 — surfaced as a 502 upstream
                 raise RuntimeError(f"OpenAI 請求失敗：{exc}") from exc

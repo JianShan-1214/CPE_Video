@@ -95,7 +95,7 @@ class Settings:
         return self.openai_api_key or _env("OPENAI_API_KEY")
 
     def resolved_openai_model(self) -> str:
-        return self.openai_model or _env("OPENAI_MODEL") or "gpt-4o-mini"
+        return self.openai_model or _env("OPENAI_MODEL") or "gpt-5.6-luna"
 
     # ── auth ─────────────────────────────────────────────────────────────
     def resolved_auth_password(self) -> str | None:
