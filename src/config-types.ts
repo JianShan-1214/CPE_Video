@@ -60,6 +60,7 @@ export type ArrayAnimation = {
     /** 要標亮的 index */
     mark?: number[];
     caption?: string;
+    vars?: AnimationVars;
   }[];
 };
 
@@ -68,10 +69,40 @@ export type StacksAnimation = {
   /** 各堆下方的標籤 */
   labels?: string[];
   /** 每個 stack 由下而上的 block id */
-  frames: { stacks: (number | string)[][]; caption?: string }[];
+  frames: {
+    stacks: (number | string)[][];
+    caption?: string;
+    vars?: AnimationVars;
+  }[];
 };
 
-export type StepAnimation = ArrayAnimation | StacksAnimation;
+/** 2D 表格（≤ 12×12，列長可不齊）；null 畫成空格 */
+export type GridAnimation = {
+  type: "grid";
+  frames: {
+    cells: VarValue[][];
+    /** 要標亮的 [row, col]；超出範圍的忽略 */
+    mark?: [number, number][];
+    caption?: string;
+    vars?: AnimationVars;
+  }[];
+};
+
+/** 只有變數表 */
+export type VarsAnimation = {
+  type: "vars";
+  frames: { vars: AnimationVars; caption?: string }[];
+};
+
+export type VarValue = number | string | boolean | null;
+/** 變數名 → 值（≤ 8 項）；每種動畫的每一格都可帶，畫成主圖下方的變數表 */
+export type AnimationVars = Record<string, VarValue>;
+
+export type StepAnimation =
+  | ArrayAnimation
+  | StacksAnimation
+  | GridAnimation
+  | VarsAnimation;
 
 export type VideoConfigJSON = {
   steps: StepJSON[];

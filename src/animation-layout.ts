@@ -1,8 +1,11 @@
 // 演算法動畫的純運算層：frame → 每個元素的位置／透明度。無 React、無 remotion 依賴，可直接測試。
 import type {
+  AnimationVars,
   ArrayAnimation,
+  GridAnimation,
   StacksAnimation,
   StepAnimation,
+  VarValue,
 } from "./config-types";
 
 export const ANIMATION_TRANSITION_FRAMES = 12;
@@ -28,6 +31,28 @@ const isCaption = (v: unknown) => v == null || typeof v === "string";
 const hasDuplicates = (vs: Value[]) =>
   new Set(vs.map(String)).size !== vs.length;
 
+export const MAX_GRID = 12;
+export const MAX_VARS = 8;
+
+const isScalar = (v: unknown): v is VarValue =>
+  v === null || typeof v === "boolean" || isValue(v);
+
+const isVars = (v: unknown) =>
+  v == null ||
+  (typeof v === "object" &&
+    !Array.isArray(v) &&
+    Object.keys(v).length <= MAX_VARS &&
+    Object.values(v).every(isScalar));
+
+const isCellList = (v: unknown) =>
+  v == null ||
+  (Array.isArray(v) &&
+    v.every((m) => Array.isArray(m) && m.length === 2 && m.every(isNum)));
+
+/** grid 格子與變數值的顯示文字；null 畫成空白 */
+export const formatScalar = (v: VarValue | undefined) =>
+  v == null ? "" : String(v);
+
 /** 輕量驗證：不合法就回 false，呼叫方改成不畫動畫，絕不讓 render 崩潰 */
 export const isValidAnimation = (a: unknown): a is StepAnimation => {
   if (typeof a !== "object" || a === null) return false;
@@ -40,6 +65,7 @@ export const isValidAnimation = (a: unknown): a is StepAnimation => {
     typeof f === "object" &&
     f !== null &&
     isCaption((f as { caption?: unknown }).caption) &&
+    isVars((f as { vars?: unknown }).vars) &&
     check(f as Record<string, unknown>);
   if (type === "array") {
     return frames.every((f) =>
@@ -83,6 +109,27 @@ export const isValidAnimation = (a: unknown): a is StepAnimation => {
           !hasDuplicates((stacks as Value[][]).flat()),
       ),
     );
+  }
+  if (type === "grid") {
+    return frames.every((f) =>
+      okFrame(
+        f,
+        ({ cells, mark }) =>
+          Array.isArray(cells) &&
+          cells.length >= 1 &&
+          cells.length <= MAX_GRID &&
+          cells.every(
+            (row) =>
+              Array.isArray(row) &&
+              row.length <= MAX_GRID &&
+              row.every(isScalar),
+          ) &&
+          isCellList(mark),
+      ),
+    );
+  }
+  if (type === "vars") {
+    return frames.every((f) => okFrame(f, ({ vars }) => vars != null));
   }
   return false;
 };
@@ -162,25 +209,159 @@ const tweenByKey = <P extends Record<string, number>>(
   return out;
 };
 
-const captionState = (
+/** 先淡出舊文字再淡入新文字，避免兩段文字疊在一起（字幕、grid 格子、變數值共用）*/
+export const crossfade = (prev: string, cur: string, p: number) =>
+  prev === cur
+    ? { text: cur, textOpacity: 1, prevText: "", prevTextOpacity: 0 }
+    : {
+        text: cur,
+        textOpacity: Math.max(0, 2 * p - 1),
+        prevText: prev,
+        prevTextOpacity: Math.max(0, 1 - 2 * p),
+      };
+
+export const captionState = (
   prev: string | null | undefined,
   cur: string | null | undefined,
   p: number,
+) => {
+  const c = crossfade(prev ?? "", cur ?? "", p);
+  return {
+    caption: c.text,
+    captionOpacity: c.textOpacity,
+    prevCaption: c.prevText,
+    prevCaptionOpacity: c.prevTextOpacity,
+  };
+};
+
+/** cur 相對 prev 新出現或值不同的變數名；沒有上一格（step 第一格）視為都沒變 */
+export const changedVars = (
+  prev: AnimationVars | null | undefined,
+  cur: AnimationVars | null | undefined,
+  hasPrev: boolean,
 ) =>
-  (prev ?? "") === (cur ?? "")
-    ? {
-        caption: cur ?? "",
-        captionOpacity: 1,
-        prevCaption: "",
-        prevCaptionOpacity: 0,
-      }
-    : // 先淡出舊字幕再淡入新字幕，避免兩行文字疊在一起
-      {
-        caption: cur ?? "",
-        captionOpacity: Math.max(0, 2 * p - 1),
-        prevCaption: prev ?? "",
-        prevCaptionOpacity: Math.max(0, 1 - 2 * p),
-      };
+  new Set(
+    hasPrev
+      ? Object.keys(cur ?? {}).filter(
+          (k) => !prev || !(k in prev) || prev[k] !== cur![k],
+        )
+      : [],
+  );
+
+/**
+ * 變數表的格局。附在主圖下方時 > 4 項改成兩欄以省高度；standalone（vars 型別）單欄大字。
+ * 高度取整段動畫的最多項數，換格時主圖不會跳動。
+ */
+export const varsTableLayout = (count: number, standalone: boolean) => {
+  const columns = !standalone && count > 4 ? 2 : 1;
+  const rowH = standalone ? 64 : 40;
+  const rows = Math.ceil(count / columns);
+  return {
+    columns,
+    rows,
+    rowH,
+    fontSize: standalone ? 30 : 22,
+    height: rows * rowH,
+  };
+};
+
+export const layoutVars = (
+  frames: { vars?: AnimationVars | null }[],
+  index: number,
+  p: number,
+  standalone: boolean,
+) => {
+  const table = varsTableLayout(
+    Math.max(0, ...frames.map((f) => Object.keys(f.vars ?? {}).length)),
+    standalone,
+  );
+  const rowMap = (i: number) => {
+    const vars = frames[i].vars ?? {};
+    const changed = changedVars(frames[i - 1]?.vars, vars, i > 0);
+    return new Map(
+      Object.keys(vars).map((name, k) => [
+        name,
+        {
+          value: formatScalar(vars[name]),
+          pos: {
+            col: Math.floor(k / table.rows),
+            row: k % table.rows,
+            mark: changed.has(name) ? 1 : 0,
+          },
+        },
+      ]),
+    );
+  };
+  const prev = rowMap(Math.max(0, index - 1));
+  const items = tweenByKey(prev, rowMap(index), p).map(
+    ({ key, value, opacity, pos }) => ({
+      name: key,
+      opacity,
+      ...pos,
+      ...crossfade(String(prev.get(key)?.value ?? value), String(value), p),
+    }),
+  );
+  return { table, items };
+};
+
+/**
+ * grid 每格的 slot 與方塊大小：塞進 w×h，方格上限同 array 的 72px。
+ * 高度吃緊（列多、下方有變數表）時橫向放寬到 48px，三位數仍放得下。
+ */
+export const gridCellSize = (
+  rows: number,
+  cols: number,
+  w: number,
+  h: number,
+) => {
+  const slotH = Math.min(80, w / Math.max(1, cols), h / Math.max(1, rows));
+  const slotW = Math.min(w / Math.max(1, cols), Math.max(slotH, 48));
+  return { slotW, slotH, cellW: slotW * 0.9, cellH: slotH * 0.9 };
+};
+
+export const layoutGrid = (
+  anim: GridAnimation,
+  frame: number,
+  duration: number,
+) => {
+  const { index, progress: p } = getSegment(
+    frame,
+    duration,
+    anim.frames.length,
+  );
+  const cur = anim.frames[index];
+  const prev = anim.frames[Math.max(0, index - 1)];
+  const cellMap = (f: GridAnimation["frames"][number]) => {
+    const marks = new Set((f.mark ?? []).map(([r, c]) => `${r},${c}`));
+    return new Map(
+      f.cells.flatMap((row, r) =>
+        row.map((v, c) => [
+          `${r},${c}`,
+          {
+            value: formatScalar(v),
+            pos: { r, c, mark: marks.has(`${r},${c}`) ? 1 : 0 },
+          },
+        ]),
+      ),
+    );
+  };
+  const prevCells = cellMap(prev);
+  // 格子不移動：key 就是座標，只補間 mark、值用 crossfade
+  const cells = tweenByKey(prevCells, cellMap(cur), p).map(
+    ({ key, value, opacity, pos }) => ({
+      key,
+      opacity,
+      ...pos,
+      ...crossfade(String(prevCells.get(key)?.value ?? value), String(value), p),
+    }),
+  );
+  return {
+    rows: Math.max(...anim.frames.map((f) => f.cells.length)),
+    cols: Math.max(1, ...anim.frames.flatMap((f) => f.cells.map((r) => r.length))),
+    cells,
+    ...captionState(prev.caption, cur.caption, p),
+  };
+};
 
 /** 指標只畫在該格範圍內的整數 index；越界（例如 j = -1 的迴圈終止狀態）直接不畫 */
 export const isValidIndex = (i: number, length: number) =>

@@ -5,10 +5,15 @@ import {
   ANIMATION_TRANSITION_FRAMES as T,
   getSegment,
   identityKeys,
+  changedVars,
+  gridCellSize,
   isValidAnimation,
   layoutArray,
+  layoutGrid,
   layoutStacks,
+  layoutVars,
   liftPath,
+  varsTableLayout,
 } from "./animation-layout.ts";
 
 const byKey = (items) => Object.fromEntries(items.map((c) => [c.key, c]));
@@ -235,5 +240,112 @@ describe("null optional fields", () => {
     assert.deepEqual(a0.pointers, []);
     assert.equal(a0.caption, "");
     assert.equal(a0.captionOpacity, 1);
+  });
+});
+
+describe("grid / vars validation", () => {
+  const grid12 = Array.from({ length: 12 }, (_, r) => Array.from({ length: 12 }, (_, c) => r * 12 + c));
+  const vars8 = Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`v${i}`, i]));
+
+  it("accepts grids up to 12x12, ragged rows, scalar cells, vars on any type", () => {
+    assert.ok(isValidAnimation({ type: "grid", frames: [{ cells: grid12, mark: [[0, 0], [99, 99]], vars: vars8 }] }));
+    assert.ok(isValidAnimation({ type: "grid", frames: [{ cells: [[1], [null, true, "x"], []], mark: null, vars: null }] }));
+    assert.ok(isValidAnimation({ type: "vars", frames: [{ vars: { a: 1, s: "x", b: false, n: null } }, { vars: {}, caption: null }] }));
+    assert.ok(isValidAnimation({ type: "array", frames: [{ values: [1], vars: { i: 0 } }] }));
+    assert.ok(isValidAnimation({ type: "stacks", frames: [{ stacks: [[1]], vars: { top: 1 } }] }));
+  });
+
+  it("rejects oversize or malformed grid / vars", () => {
+    for (const bad of [
+      { type: "grid", frames: [{ cells: [...grid12, [1]] }] },
+      { type: "grid", frames: [{ cells: [[...grid12[0], 1]] }] },
+      { type: "grid", frames: [{ cells: [] }] },
+      { type: "grid", frames: [{ cells: [1, 2] }] },
+      { type: "grid", frames: [{ cells: [[{}]] }] },
+      { type: "grid", frames: [{ cells: [[NaN]] }] },
+      { type: "grid", frames: [{ cells: [[1]], mark: [0, 0] }] },
+      { type: "grid", frames: [{ cells: [[1]], mark: [[0, Infinity]] }] },
+      { type: "grid", frames: [{}] },
+      { type: "vars", frames: [{}] },
+      { type: "vars", frames: [{ vars: null }] },
+      { type: "vars", frames: [{ vars: [1] }] },
+      { type: "vars", frames: [{ vars: { ...vars8, x: 1 } }] },
+      { type: "vars", frames: [{ vars: { a: Infinity } }] },
+      { type: "vars", frames: [{ vars: { a: [1] } }] },
+      { type: "array", frames: [{ values: [1], vars: { a: {} } }] },
+      { type: "stacks", frames: [{ stacks: [[1]], vars: "i=0" }] },
+    ]) {
+      assert.equal(isValidAnimation(bad), false, JSON.stringify(bad));
+    }
+  });
+});
+
+describe("layoutGrid", () => {
+  const anim = {
+    type: "grid",
+    frames: [
+      { cells: [[1, 2], [3]], mark: [[0, 0]], caption: "a" },
+      { cells: [[1, 5], [null, 4]], mark: [[1, 1], [7, 7]], caption: "b" },
+    ],
+  };
+
+  it("keeps cells in place, crossfades changed values, tweens marks", () => {
+    const mid = byKey(layoutGrid(anim, 30 + T / 2, 60).cells);
+    assert.deepEqual([mid["0,1"].r, mid["0,1"].c], [0, 1]);
+    assert.deepEqual([mid["0,1"].prevText, mid["0,1"].text], ["2", "5"]);
+    assert.deepEqual([mid["0,1"].prevTextOpacity, mid["0,1"].textOpacity, mid["0,1"].opacity], [0, 0, 1]);
+    assert.equal(mid["0,0"].prevTextOpacity, 0);
+    assert.equal(mid["0,0"].mark, 0.5);
+    assert.equal(mid["1,1"].opacity, 0.5, "new cell fades in");
+    assert.equal(mid["1,0"].text, "", "null renders empty");
+    assert.equal(mid["7,7"], undefined, "out-of-range mark ignored");
+  });
+
+  it("reports stable bounds over ragged rows", () => {
+    const out = layoutGrid(anim, 0, 60);
+    assert.deepEqual([out.rows, out.cols, out.caption], [2, 2, "a"]);
+  });
+});
+
+describe("gridCellSize", () => {
+  it("caps at array size and shrinks to fit the tighter axis", () => {
+    assert.deepEqual(gridCellSize(3, 4, 560, 500), { slotW: 80, slotH: 80, cellW: 72, cellH: 72 });
+    const tall = gridCellSize(12, 12, 560, 420);
+    assert.deepEqual([tall.slotH, tall.slotW], [35, 560 / 12], "widens past height when width allows");
+    assert.equal(gridCellSize(12, 12, 400, 420).slotW, 400 / 12, "never wider than the panel");
+    assert.equal(gridCellSize(2, 12, 560, 420).slotH, 560 / 12);
+  });
+});
+
+describe("vars table", () => {
+  it("detects new and changed values only after the first frame", () => {
+    assert.deepEqual([...changedVars({ i: 1, s: "a", n: null }, { i: 2, s: "a", n: null, k: 0 }, true)], ["i", "k"]);
+    assert.deepEqual([...changedVars(undefined, { i: 1 }, false)], []);
+    assert.deepEqual([...changedVars(null, { i: 1 }, true)], ["i"]);
+  });
+
+  it("uses two columns below a main visual when > 4 entries", () => {
+    assert.deepEqual(varsTableLayout(5, false), { columns: 2, rows: 3, rowH: 40, fontSize: 22, height: 120 });
+    assert.equal(varsTableLayout(4, false).columns, 1);
+    assert.equal(varsTableLayout(0, false).height, 0);
+    assert.equal(varsTableLayout(8, true).columns, 1);
+  });
+
+  it("highlights changed values and crossfades them", () => {
+    const frames = [{ vars: { i: 0, j: 1 } }, { vars: { i: 0, j: 2 } }, { vars: { i: 1, j: 2 } }];
+    const f0 = byKey(layoutVars(frames, 0, 1, false).items.map((v) => ({ ...v, key: v.name })));
+    assert.deepEqual([f0.i.mark, f0.j.mark], [0, 0]);
+    const f1 = byKey(layoutVars(frames, 1, 0.5, false).items.map((v) => ({ ...v, key: v.name })));
+    assert.deepEqual([f1.j.mark, f1.j.prevText, f1.j.text, f1.i.mark], [0.5, "1", "2", 0]);
+    // 第 2 格：j 的高亮退掉、i 的高亮亮起
+    const f2 = byKey(layoutVars(frames, 2, 1, false).items.map((v) => ({ ...v, key: v.name })));
+    assert.deepEqual([f2.i.mark, f2.j.mark, f2.i.text], [1, 0, "1"]);
+  });
+
+  it("fades rows in and out when the variable set changes", () => {
+    const frames = [{ vars: { i: 0 } }, { vars: { k: true } }, {}];
+    const mid = byKey(layoutVars(frames, 1, 0.5, false).items.map((v) => ({ ...v, key: v.name })));
+    assert.deepEqual([mid.i.opacity, mid.k.opacity, mid.k.text], [0.5, 0.5, "true"]);
+    assert.deepEqual(layoutVars(frames, 2, 1, false).items.map((v) => [v.name, v.opacity]), [["k", 0]]);
   });
 });
