@@ -1,8 +1,11 @@
 import { getThemeColors } from "@code-hike/lighter";
 import { measureText } from "@remotion/layout-utils";
 import { HighlightedCode } from "codehike/code";
+import { isValidAnimation } from "../animation-layout";
+import { ANNOTATION_ROOM } from "../FloatingAnnotation";
 import { resolveHighlight, StepJSON } from "../config-types";
 import {
+  ANIMATION_PANEL_WIDTH,
   fontFamily,
   fontSize,
   horizontalPadding,
@@ -115,13 +118,19 @@ export const expandProps = async (
         };
       }),
       audioSrc: step.audioSrc,
+      // 不合法的動畫直接丟掉（不畫），不讓 render 崩潰
+      animation: isValidAnimation(step.animation) ? step.animation : null,
     };
   });
 
   const totalFrames = resolvedSteps.reduce((a, s) => a + s.durationInFrames, 0);
 
-  const naturalWidth =
-    codeWidth + (horizontalPadding + lineNumberGutterWidth) * 2;
+  // 有任一步帶動畫時，右側加一塊固定寬度的動畫面板，並在程式碼與面板間留足標注氣泡的空間；
+  // 沒有動畫的影片寬度完全不變
+  const hasAnimation = resolvedSteps.some((s) => s.animation);
+  const naturalWidth = hasAnimation
+    ? horizontalPadding + lineNumberGutterWidth + codeWidth + ANNOTATION_ROOM + ANIMATION_PANEL_WIDTH
+    : codeWidth + (horizontalPadding + lineNumberGutterWidth) * 2;
   const divisibleByTwo = Math.ceil(naturalWidth / 2) * 2;
   const minimumWidth = input.width.type === "fixed" ? 0 : 1080;
   const minimumWidthApplied = Math.max(minimumWidth, divisibleByTwo);

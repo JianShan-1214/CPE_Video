@@ -23,13 +23,23 @@ const THEMES = {
 
 const LINE_GAP = 16;    // 程式碼右端到垂直指示條的間距
 const LEAD_LENGTH = 52; // 水平引導線長度
+const SAFE_MARGIN = 32;
+// 有動畫面板時：氣泡 padding+border (38) 不算在 maxWidth 內，加上 IDE 內縮與間隙
+const PANEL_GAP = 40;
+const MIN_BUBBLE_WIDTH = 360;
+
+/** 有動畫面板時，程式碼右端之後至少要留的寬度，保證氣泡 ≥ MIN_BUBBLE_WIDTH 且不壓到面板 */
+export const ANNOTATION_ROOM =
+  LINE_GAP + 3 + LEAD_LENGTH + MIN_BUBBLE_WIDTH + SAFE_MARGIN + PANEL_GAP;
 
 export const FloatingAnnotation: React.FC<{
   callout: AnnotationCallout;
   stepDuration: number;
   /** 該行程式碼右端的 X 座標（px），由 calculateMetadata 計算後填入 */
   lineEndX: number;
-}> = ({ callout, stepDuration, lineEndX }) => {
+  /** 右側動畫面板寬度（沒有面板為 0），氣泡不得伸進面板 */
+  panelWidth?: number;
+}> = ({ callout, stepDuration, lineEndX, panelWidth = 0 }) => {
   const frame = useCurrentFrame();
   const { fps, width: videoWidth } = useVideoConfig();
 
@@ -58,11 +68,11 @@ export const FloatingAnnotation: React.FC<{
   const lineY = (callout.targetLine - 1) * LINE_HEIGHT + verticalPadding + LINE_HEIGHT / 2;
 
   // X 座標計算
-  const SAFE_MARGIN = 32;
   const indicatorX  = lineEndX + LINE_GAP;
   const guideStartX = indicatorX + 3;
   const bubbleX     = guideStartX + LEAD_LENGTH;
-  const bubbleMaxWidth = Math.max(160, videoWidth - bubbleX - SAFE_MARGIN);
+  const rightLimit = panelWidth > 0 ? videoWidth - panelWidth - PANEL_GAP : videoWidth;
+  const bubbleMaxWidth = Math.max(160, rightLimit - bubbleX - SAFE_MARGIN);
   const slideX      = interpolate(pop, [0, 1], [-16, 0]);
 
   return (

@@ -8,6 +8,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
+import { AnimationPanel } from "./AnimationPanel";
 import { AudioPlayer } from "./AudioPlayer";
 import { CodeTransition } from "./CodeTransition";
 import { FloatingAnnotation } from "./FloatingAnnotation";
@@ -16,9 +17,15 @@ import { HighlightOverlay } from "./HighlightOverlay";
 import { LineNumbers } from "./LineNumbers";
 import { RefreshOnCodeChange } from "./ReloadOnCodeChange";
 import { ThemeColors, ThemeProvider } from "./calculate-metadata/theme";
-import { horizontalPadding, lineNumberGutterWidth, verticalPadding } from "./font";
+import {
+  ANIMATION_PANEL_WIDTH,
+  horizontalPadding,
+  lineNumberGutterWidth,
+  verticalPadding,
+} from "./font";
 import { CODE_SECTION_HEIGHT, IDEFrame, SUBTITLE_HEIGHT } from "./IDEFrame";
 import { SubtitleBar } from "./SubtitleBar";
+import { StepAnimation } from "./config-types";
 import { AnnotationCallout, HighlightConfig } from "./step-animations";
 import { computeStepScroll } from "./step-visual-elements";
 
@@ -32,6 +39,7 @@ export type StepProps = {
   highlight: HighlightConfig | null;
   annotations: AnnotationCallout[];
   audioSrc: string | undefined;
+  animation: StepAnimation | null;
 };
 
 export type Props = {
@@ -54,9 +62,10 @@ const ANIM_IN_START = TRANSITION_DURATION;
 const CodeStep: React.FC<{
   step: StepProps;
   prevCode: HighlightedCode | null;
+  prevAnimation: StepAnimation | null;
   scrollFrom: number;
   scrollTo: number;
-}> = ({ step, prevCode, scrollFrom, scrollTo }) => {
+}> = ({ step, prevCode, prevAnimation, scrollFrom, scrollTo }) => {
   const frame = useCurrentFrame();
   const { durationInFrames: stepDuration } = useVideoConfig();
 
@@ -113,52 +122,59 @@ const CodeStep: React.FC<{
   );
 
   return (
-    <div style={outerStyle}>
-      <div style={scrollWrapStyle}>
-        {step.highlight && (
-          <HighlightOverlay
-            config={step.highlight}
+    <>
+      <div style={outerStyle}>
+        <div style={scrollWrapStyle}>
+          {step.highlight && (
+            <HighlightOverlay
+              config={step.highlight}
+              showFromFrame={ANIM_IN_START}
+              stepDuration={stepDuration}
+              totalLines={step.code.tokens.length}
+            />
+          )}
+
+          <LineNumbers
+            totalLines={step.code.tokens.length}
+            config={step.highlight ?? undefined}
             showFromFrame={ANIM_IN_START}
             stepDuration={stepDuration}
-            totalLines={step.code.tokens.length}
           />
-        )}
 
-        <LineNumbers
-          totalLines={step.code.tokens.length}
-          config={step.highlight ?? undefined}
-          showFromFrame={ANIM_IN_START}
-          stepDuration={stepDuration}
-        />
+          {step.annotations.map((callout, i) => (
+            <React.Fragment key={i}>
+              <HighlightBox
+                targetLine={callout.targetLine}
+                lineStartX={callout.lineStartX}
+                lineEndX={callout.lineEndX}
+                startFrame={callout.startFrame}
+                stepDuration={stepDuration}
+                theme={callout.theme}
+              />
+              <FloatingAnnotation
+                callout={callout}
+                stepDuration={stepDuration}
+                lineEndX={callout.lineEndX}
+                panelWidth={step.animation ? ANIMATION_PANEL_WIDTH : 0}
+              />
+            </React.Fragment>
+          ))}
 
-        {step.annotations.map((callout, i) => (
-          <React.Fragment key={i}>
-            <HighlightBox
-              targetLine={callout.targetLine}
-              lineStartX={callout.lineStartX}
-              lineEndX={callout.lineEndX}
-              startFrame={callout.startFrame}
-              stepDuration={stepDuration}
-              theme={callout.theme}
+          <div style={codeWrapStyle}>
+            <CodeTransition
+              oldCode={prevCode}
+              newCode={step.code}
+              durationInFrames={TRANSITION_DURATION}
             />
-            <FloatingAnnotation
-              callout={callout}
-              stepDuration={stepDuration}
-              lineEndX={callout.lineEndX}
-            />
-          </React.Fragment>
-        ))}
-
-        <div style={codeWrapStyle}>
-          <CodeTransition
-            oldCode={prevCode}
-            newCode={step.code}
-            durationInFrames={TRANSITION_DURATION}
-          />
+          </div>
         </div>
+        {step.audioSrc && <AudioPlayer src={step.audioSrc} />}
       </div>
-      {step.audioSrc && <AudioPlayer src={step.audioSrc} />}
-    </div>
+      {/* 面板放在進場 slide/fade 之外，連續兩步都有動畫時才不會每步閃一下 */}
+      {step.animation && (
+        <AnimationPanel animation={step.animation} prevAnimation={prevAnimation} />
+      )}
+    </>
   );
 };
 
@@ -218,6 +234,7 @@ export const Main: React.FC<Props> = ({ steps, themeColors, folder }) => {
                   <CodeStep
                     step={step}
                     prevCode={steps[index - 1]?.code ?? null}
+                    prevAnimation={steps[index - 1]?.animation ?? null}
                     scrollFrom={index > 0 ? scrollTargets[index - 1] : 0}
                     scrollTo={scrollTargets[index]}
                   />
