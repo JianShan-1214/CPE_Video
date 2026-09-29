@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseAnimationJson, toLine, toOptionalLine, toSeconds } from "./step-fields.ts";
+import { parseAnimationJson, parseTraceJson, toLine, toOptionalLine, toSeconds } from "./step-fields.ts";
 
 test("line inputs never store 0, fractions or NaN", () => {
   assert.equal(toLine(""), 1);
@@ -43,10 +43,63 @@ test("animation JSON: bad input is rejected with a message", () => {
     ['{"type":"array","frames":[{"values":[1],"caption":3}]}', /caption/],
     ['{"type":"stacks","frames":[{"stacks":[1]}]}', /stacks/],
     ['{"type":"stacks","labels":[1],"frames":[{"stacks":[]}]}', /labels/],
+    ['{"type":"array","frames":[{"values":[1],"vars":[1]}]}', /vars/],
+    ['{"type":"array","frames":[{"values":[1],"vars":{"i":[1]}}]}', /vars/],
+    ['{"type":"stacks","frames":[{"stacks":[],"vars":null}]}', /vars/],
+    ['{"type":"grid","frames":[{"cells":[]}]}', /cells/],
+    ['{"type":"grid","frames":[{"cells":[1]}]}', /cells/],
+    ['{"type":"grid","frames":[{"cells":[[{}]]}]}', /cells/],
+    ['{"type":"grid","frames":[{"cells":[[1]],"mark":[[0]]}]}', /mark/],
+    ['{"type":"grid","frames":[{"cells":[[1]],"mark":[0,0]}]}', /mark/],
+    ['{"type":"vars","frames":[{"caption":"x"}]}', /vars/],
   ];
   for (const [text, message] of bad) {
     const result = parseAnimationJson(text);
     assert.equal(result.ok, false, text);
     if (!result.ok) assert.match(result.error, message, text);
   }
+});
+
+test("animation JSON: grid, vars and frame vars pass through", () => {
+  const shapes = [
+    { type: "array", frames: [{ values: [1], vars: { i: 0, ok: true, s: "a", none: null } }] },
+    { type: "stacks", frames: [{ stacks: [[1]], vars: { n: 1 } }] },
+    { type: "grid", frames: [{ cells: [[1, null], ["#", true, 2.5]], mark: [[0, 1]], caption: "c", vars: { i: 1 } }] },
+    { type: "vars", frames: [{ vars: { sum: 3 } }, { vars: {}, caption: "空" }] },
+  ];
+  for (const a of shapes) assert.deepEqual(parseAnimationJson(JSON.stringify(a)), { ok: true, value: a });
+});
+
+test("trace JSON: empty → null, valid plan passes, bad plan names the field", () => {
+  assert.deepEqual(parseTraceJson(" "), { ok: true, value: null });
+  const plan = {
+    line: 7,
+    show: { as: "array", expr: "a", length: null },
+    pointers: ["i", "j"],
+    vars: [],
+    maxFrames: 8,
+    caption: null,
+  };
+  assert.deepEqual(parseTraceJson(JSON.stringify(plan)), { ok: true, value: plan });
+  for (const when of ["before", "after"]) {
+    assert.deepEqual(parseTraceJson(JSON.stringify({ ...plan, when })), { ok: true, value: { ...plan, when } });
+  }
+  const bad: [unknown, RegExp][] = [
+    [[], /物件/],
+    [{ ...plan, line: 0 }, /line/],
+    [{ ...plan, show: { as: "tree" } }, /show\.as/],
+    [{ ...plan, show: { as: "array", expr: 1 } }, /show\.expr/],
+    [{ ...plan, pointers: "i" }, /pointers/],
+    [{ ...plan, vars: undefined }, /vars/],
+    [{ ...plan, maxFrames: 13 }, /maxFrames/],
+    [{ ...plan, caption: 1 }, /caption/],
+    [{ ...plan, when: "during" }, /when/],
+    [{ ...plan, when: null }, /when/],
+  ];
+  for (const [t, message] of bad) {
+    const result = parseTraceJson(JSON.stringify(t));
+    assert.equal(result.ok, false, JSON.stringify(t));
+    if (!result.ok) assert.match(result.error, message, JSON.stringify(t));
+  }
+  assert.equal(parseTraceJson("{").ok, false);
 });

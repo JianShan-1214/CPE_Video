@@ -12,6 +12,8 @@ class JobModel(Base):
     theme: Mapped[str] = mapped_column(String, nullable=False)
     width_json: Mapped[str] = mapped_column(Text, nullable=False)
     steps_json: Mapped[str] = mapped_column(Text, nullable=False)
+    sample_input: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    sample_output: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     created_at: Mapped[int] = mapped_column(Integer, nullable=False)
     updated_at: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
 

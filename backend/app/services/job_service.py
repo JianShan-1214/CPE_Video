@@ -23,6 +23,8 @@ def job_from_model(model: JobModel) -> JobResponse:
         theme=model.theme,
         width=json.loads(model.width_json),
         steps=json.loads(model.steps_json),
+        sampleInput=model.sample_input or "",
+        sampleOutput=model.sample_output or "",
     )
 
 
@@ -63,6 +65,8 @@ async def save_generated_job(
     session: AsyncSession,
     name: str,
     steps: list[DraftStep],
+    sample_input: str = "",
+    sample_output: str = "",
 ) -> JobResponse:
     timestamp = now_ms()
     model = JobModel(
@@ -71,6 +75,8 @@ async def save_generated_job(
         theme="github-dark",
         width_json=json.dumps({"type": "fixed", "value": 1920}),
         steps_json=json.dumps([step.model_dump(by_alias=True, exclude_none=True) for step in steps]),
+        sample_input=sample_input,
+        sample_output=sample_output,
         created_at=timestamp,
         updated_at=timestamp,
     )
@@ -93,6 +99,8 @@ async def update_job(
     model.steps_json = json.dumps(
         [step.model_dump(by_alias=True, exclude_none=True) for step in payload.steps],
     )
+    model.sample_input = payload.sampleInput
+    model.sample_output = payload.sampleOutput
     model.updated_at = now_ms()
     await session.commit()
     await session.refresh(model)

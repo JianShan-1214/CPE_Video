@@ -1,9 +1,10 @@
 import { type ReactNode, useState } from "react";
 import type { AnnotationJSON, HighlightPreset } from "@remotion-src/config-types";
 import { HIGHLIGHT_PRESETS } from "@remotion-src/config-types";
-import { Clapperboard, Highlighter, MessageSquareText, Plus, Trash2 } from "lucide-react";
+import { Clapperboard, Footprints, Highlighter, MessageSquareText, Plus, Trash2 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import type { DraftStep } from "@/lib/draft-types";
-import { parseAnimationJson, toLine, toOptionalLine, toSeconds } from "@/lib/step-fields";
+import { parseAnimationJson, parseTraceJson, toLine, toOptionalLine, toSeconds } from "@/lib/step-fields";
 
 const HIGHLIGHT_COLOR_OPTIONS: (HighlightPreset | "none")[] = [
   "none",
@@ -303,32 +304,51 @@ export function StepEditor({ step, onChange }: Props) {
         </div>
       </section>
 
-      <AnimationField
-        animation={step.animation}
+      <JsonField
+        icon={Footprints}
+        label="追蹤計畫（選填，JSON）"
+        value={step.trace}
+        parse={parseTraceJson}
+        onChange={(trace) => patch({ trace })}
+        placeholder='{"line": 7, "show": {"as": "array", "expr": "a"}, "pointers": ["i"], "vars": [], "maxFrames": 8}'
+      />
+
+      <JsonField
+        icon={Clapperboard}
+        label="動畫（由追蹤產生，可手動修改）"
+        value={step.animation}
+        parse={parseAnimationJson}
         onChange={(animation) => patch({ animation })}
+        placeholder='{"type": "array", "frames": [{"values": [3, 1, 2], "pointers": {"i": 0}}]}'
       />
     </div>
   );
 }
 
 // The textarea keeps its own text so half-typed JSON isn't lost; only a valid
-// animation (or empty → none) reaches the draft. The parent remounts this
-// editor per step, so the initial text always matches the selected step.
-function AnimationField({
-  animation,
+// value (or empty → none) reaches the draft. The parent remounts this editor
+// per step (and after 「重新產生動畫」), so the initial text matches the step.
+function JsonField<T>({
+  icon: Icon,
+  label,
+  value,
+  parse,
   onChange,
+  placeholder,
 }: {
-  animation: DraftStep["animation"];
-  onChange: (next: DraftStep["animation"]) => void;
+  icon: LucideIcon;
+  label: string;
+  value: T | null | undefined;
+  parse: (text: string) => { ok: true; value: T } | { ok: false; error: string };
+  onChange: (next: T) => void;
+  placeholder: string;
 }) {
-  const [text, setText] = useState(() =>
-    animation ? JSON.stringify(animation, null, 2) : "",
-  );
+  const [text, setText] = useState(() => (value ? JSON.stringify(value, null, 2) : ""));
   const [error, setError] = useState<string | null>(null);
 
-  const handleChange = (value: string) => {
-    setText(value);
-    const parsed = parseAnimationJson(value);
+  const handleChange = (next: string) => {
+    setText(next);
+    const parsed = parse(next);
     if (!parsed.ok) {
       setError(parsed.error);
       return;
@@ -340,8 +360,8 @@ function AnimationField({
   return (
     <section className="rounded-xl border border-line bg-ink-900/60 p-4 space-y-3">
       <div className="flex items-center gap-2">
-        <Clapperboard size={13} className="text-faint" strokeWidth={1.8} />
-        <span className="eyebrow">動畫（選填，JSON）</span>
+        <Icon size={13} className="text-faint" strokeWidth={1.8} />
+        <span className="eyebrow">{label}</span>
       </div>
       <textarea
         value={text}
@@ -349,8 +369,8 @@ function AnimationField({
         rows={6}
         className="input resize-y font-mono text-xs leading-relaxed"
         spellCheck={false}
-        placeholder='{"type": "array", "frames": [{"values": [3, 1, 2], "pointers": {"i": 0}}]}'
-        aria-label="動畫 JSON"
+        placeholder={placeholder}
+        aria-label={label}
       />
       {error && <div className="error-banner">{error}（尚未套用）</div>}
     </section>

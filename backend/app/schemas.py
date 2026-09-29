@@ -1,6 +1,6 @@
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, model_serializer
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, model_serializer, model_validator
 
 
 HighlightPreset = Literal["blue", "yellow", "red", "green", "lightblue"]
@@ -83,11 +83,17 @@ class _OmitNone(BaseModel):
         return {k: v for k, v in handler(self).items() if v is not None}
 
 
+# Variable-table values; the renderer shows null as an empty cell.
+VarValue = bool | int | FiniteFloat | str | None
+AnimationVars = dict[str, VarValue]  # ≤ 8 entries, reported by validate_draft
+
+
 class ArrayFrame(_OmitNone):
     values: list[AnimationValue]
     pointers: dict[str, int] | None = None
     mark: list[int] | None = None
     caption: str | None = None
+    vars: AnimationVars | None = None
 
 
 class ArrayAnimation(BaseModel):
@@ -98,6 +104,7 @@ class ArrayAnimation(BaseModel):
 class StacksFrame(_OmitNone):
     stacks: list[list[AnimationValue]]
     caption: str | None = None
+    vars: AnimationVars | None = None
 
 
 class StacksAnimation(_OmitNone):
@@ -106,7 +113,60 @@ class StacksAnimation(_OmitNone):
     frames: list[StacksFrame]
 
 
-StepAnimation = Annotated[ArrayAnimation | StacksAnimation, Field(discriminator="type")]
+class GridFrame(_OmitNone):
+    cells: list[list[VarValue]]
+    mark: list[tuple[int, int]] | None = None
+    caption: str | None = None
+    vars: AnimationVars | None = None
+
+
+class GridAnimation(BaseModel):
+    type: Literal["grid"]
+    frames: list[GridFrame]
+
+
+class VarsFrame(_OmitNone):
+    vars: AnimationVars
+    caption: str | None = None
+
+
+class VarsAnimation(BaseModel):
+    type: Literal["vars"]
+    frames: list[VarsFrame]
+
+
+StepAnimation = Annotated[
+    ArrayAnimation | StacksAnimation | GridAnimation | VarsAnimation, Field(discriminator="type")
+]
+
+
+# The LLM's trace plan for a step: the backend runs the real program and builds
+# ``animation`` from snapshots taken before/after ``line``. Also the strict-mode AI
+# schema, so no free-key dicts and no non-None defaults.
+class TraceShow(BaseModel):
+    as_: Literal["array", "grid", "stacks", "queue", "vars"] = Field(alias="as")
+    expr: str | None = None
+    length: str | None = None
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class StepTrace(BaseModel):
+    line: int = Field(ge=1)  # 1-based, in this step's fileContent; must be a line this step adds
+    show: TraceShow
+    pointers: list[str]
+    vars: list[str]
+    maxFrames: int = Field(ge=1, le=12)
+    caption: str | None = None
+    when: Literal["before", "after"]  # snapshot runs before / after ``line`` executes
+
+    @model_validator(mode="before")
+    @classmethod
+    def _default_when(cls, data):
+        # Stored plans predate ``when``. Not a field default: strict mode rejects those.
+        if isinstance(data, dict) and "when" not in data:
+            return {**data, "when": "before"}
+        return data
 
 
 class DraftStep(BaseModel):
@@ -120,6 +180,7 @@ class DraftStep(BaseModel):
     highlight: HighlightConfig | None = None
     annotations: list[Annotation] | None = None
     animation: StepAnimation | None = None
+    trace: StepTrace | None = None
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -139,6 +200,8 @@ class JobUpdateRequest(BaseModel):
     theme: Theme
     width: WidthConfig
     steps: list[DraftStep]
+    sampleInput: str = ""
+    sampleOutput: str = ""
 
 
 class JobResponse(BaseModel):
@@ -149,6 +212,8 @@ class JobResponse(BaseModel):
     theme: Theme
     width: WidthConfig
     steps: list[DraftStep]
+    sampleInput: str = ""
+    sampleOutput: str = ""
 
 
 class ImportJobRequest(BaseModel):
@@ -162,6 +227,8 @@ class GenerateDraftRequest(BaseModel):
     problemStatement: str
     solutionCode: str
     withAnimation: bool = False
+    sampleInput: str = ""
+    sampleOutput: str = ""
 
 
 class ProblemStatementRequest(BaseModel):
@@ -171,6 +238,8 @@ class ProblemStatementRequest(BaseModel):
 class ProblemStatementResponse(BaseModel):
     uvaId: int
     problemStatement: str
+    sampleInput: str = ""
+    sampleOutput: str = ""
 
 
 class DraftCheckRequest(BaseModel):
@@ -186,6 +255,17 @@ class DraftCheckIssue(BaseModel):
 
 
 class DraftCheckResponse(BaseModel):
+    issues: list[DraftCheckIssue]
+
+
+class DraftTraceRequest(BaseModel):
+    steps: list[CheckedDraftStep] = Field(min_length=1, max_length=60)
+    sampleInput: str = ""
+    sampleOutput: str = ""
+
+
+class DraftTraceResponse(BaseModel):
+    steps: list[DraftStep]
     issues: list[DraftCheckIssue]
 
 

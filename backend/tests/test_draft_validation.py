@@ -180,6 +180,9 @@ def fake_client(monkeypatch, responses):
     return calls
 
 
+NO_ISSUES = {"issues": []}
+
+
 def broken_ai_draft():
     ai = valid_ai_draft()
     ai["steps"][5]["fileContent"] = COMMENT + READ  # last step doesn't match the solution
@@ -193,9 +196,9 @@ async def run(provider=None):
 
 @pytest.mark.anyio
 async def test_retry_sends_errors_back_and_returns_fixed_draft(monkeypatch):
-    calls = fake_client(monkeypatch, [broken_ai_draft(), valid_ai_draft()])
+    calls = fake_client(monkeypatch, [broken_ai_draft(), valid_ai_draft(), NO_ISSUES])
     draft = await run()
-    assert len(calls) == 2
+    assert len(calls) == 3  # 2 drafts + 1 review
     assert draft.steps[-1].fileContent == COMMENT + FULL
     feedback = calls[1][-1]["content"]
     assert calls[1][-2]["role"] == "assistant"
@@ -206,17 +209,17 @@ async def test_retry_sends_errors_back_and_returns_fixed_draft(monkeypatch):
 async def test_always_invalid_returns_last_draft(monkeypatch):
     last = broken_ai_draft()
     last["jobName"] = "last"
-    calls = fake_client(monkeypatch, [broken_ai_draft(), broken_ai_draft(), last])
+    calls = fake_client(monkeypatch, [broken_ai_draft(), broken_ai_draft(), last, NO_ISSUES])
     draft = await run()
-    assert len(calls) == 3
+    assert len(calls) == 4
     assert draft.job_name == "last"
 
 
 @pytest.mark.anyio
 async def test_failed_retry_request_keeps_previous_draft(monkeypatch):
-    calls = fake_client(monkeypatch, [broken_ai_draft(), ConnectionError("network down")])
+    calls = fake_client(monkeypatch, [broken_ai_draft(), ConnectionError("network down"), NO_ISSUES])
     draft = await run()
-    assert len(calls) == 2
+    assert len(calls) == 3
     assert draft.steps[-1].fileContent == COMMENT + READ
 
 
@@ -249,3 +252,103 @@ def test_malformed_example_config_is_skipped(tmp_path):
     (tmp_path / "config.json").write_text('{"steps": [{"label": "x", "file": "a.cpp"}]}', encoding="utf-8")
     (tmp_path / "a.cpp").write_text("// x\n", encoding="utf-8")
     assert load_example_messages(tmp_path) == []  # missing subtitle must not crash app startup
+
+
+def test_same_file_label_with_different_content_is_an_error():
+    errors = messages_of(validate_draft(build(broken_ai_draft()), SOLUTION), "error")
+    assert any("第 6 步的 fileLabel「code04.cpp」和第 5 步相同" in m and "codeNN.cpp" in m for m in errors)
+    assert not any("fileLabel" in m for m in messages_of(validate_draft(build(valid_ai_draft()), SOLUTION), "error"))
+
+
+def _traced(caption):
+    trace = {"line": 7, "show": {"as": "vars"}, "pointers": [], "vars": ["a", "area"], "maxFrames": 3, "caption": caption}
+    return DraftStep.model_validate({**step(COMMENT + FULL).model_dump(by_alias=True), "trace": trace})
+
+
+@pytest.mark.parametrize(
+    ("caption", "warned"),
+    [
+        ("目前邊長為a、b，面積為 area", "a"),
+        ("面積為 area", "area"),
+        ("面積為 {area}，邊長 a", None),  # has a placeholder
+        ("開始比較", None),  # mentions no value
+        ("area_max 與 banana", None),  # not bare traced names
+        (None, None),
+    ],
+)
+def test_caption_without_placeholder_mentioning_traced_name_warns(caption, warned):
+    warnings = [m for m in messages_of(validate_draft([_traced(caption)], None), "warning") if "佔位符" in m]
+    assert warnings == ([f"第 1 步的動畫說明提到 {warned} 卻沒有用 {{{warned}}}，畫面上不會出現它的值；請把值寫成 {{變數}} 佔位符。"] if warned else [])
+
+
+@pytest.mark.anyio
+async def test_generate_keeps_remaining_issues_on_the_draft(monkeypatch):
+    fake_client(monkeypatch, [broken_ai_draft()] * 3)
+    draft = await run()
+    assert any(i.level == "error" and "最後一步" in i.message for i in draft.issues)
+
+
+# ── subtitle auto-fix after the AI review ────────────────────────────────────
+
+REVIEW_ERR = "字幕說會輸出兩數之差，但第 10 行輸出的是 a + b"
+FIXED = "接下來我們把讀進來的 a 和 b 相加，再用 cout 輸出總和並換行，這就是題目要的答案。"
+
+
+def review(*issues):
+    return {"issues": [{"stepNumber": n, "level": level, "message": m} for n, level, m in issues]}
+
+
+def fixes(*pairs):
+    return {"fixes": [{"stepNumber": n, "subtitle": s} for n, s in pairs]}
+
+
+@pytest.mark.anyio
+async def test_review_error_subtitle_is_rewritten_and_retimed(monkeypatch):
+    too_long = FIXED * 3  # > 80 chars: the length warning is recomputed for the fixed step
+    calls = fake_client(monkeypatch, [
+        valid_ai_draft(),
+        review((3, "error", REVIEW_ERR), (4, "warning", "字幕可以更具體")),
+        fixes((3, too_long)),
+    ])
+    draft = await run()
+    assert len(calls) == 3
+    prompt = calls[2][-1]["content"]
+    assert "## 第 3 步" in prompt and "## 第 4 步" not in prompt
+    assert REVIEW_ERR in prompt and SUB_OK in prompt and "字數：30–80 字" in prompt
+    assert [s.subtitle for s in draft.steps][2:4] == [too_long, SUB_OK]
+    assert draft.steps[2].to == round(draft.steps[2].from_ + len(too_long) / 4.2, 1)
+    assert all(a.to == b.from_ for a, b in zip(draft.steps, draft.steps[1:]))
+    assert [(i.step_index, i.level, i.message) for i in draft.issues] == [
+        (2, "warning", f"第 3 步字幕有 {len(too_long)} 字，建議 30–80 字。"),
+        (2, "warning", f"第 3 步字幕已依 AI 審稿自動修正：{REVIEW_ERR}"),
+    ]
+
+
+@pytest.mark.anyio
+async def test_no_review_errors_means_no_fix_call(monkeypatch):
+    calls = fake_client(monkeypatch, [valid_ai_draft(), review((4, "warning", "字幕可以更具體"))])
+    draft = await run()
+    assert len(calls) == 2
+    assert draft.issues == []
+
+
+@pytest.mark.anyio
+async def test_failed_fix_keeps_draft_and_reports(monkeypatch):
+    fake_client(monkeypatch, [valid_ai_draft(), NO_ISSUES])
+    baseline = await run()
+    fake_client(monkeypatch, [valid_ai_draft(), review((3, "error", REVIEW_ERR)), ConnectionError("down")])
+    draft = await run()
+    assert draft.steps == baseline.steps
+    assert [(i.step_index, i.level) for i in draft.issues] == [(2, "error"), (None, "warning")]
+    assert draft.issues[0].message == REVIEW_ERR
+    assert draft.issues[1].message.startswith("AI 審稿／字幕修正失敗：")
+
+
+@pytest.mark.anyio
+async def test_fix_for_unflagged_step_is_ignored(monkeypatch):
+    fake_client(monkeypatch, [valid_ai_draft(), NO_ISSUES])
+    baseline = await run()
+    fake_client(monkeypatch, [valid_ai_draft(), review((3, "error", REVIEW_ERR)), fixes((4, FIXED), (99, FIXED))])
+    draft = await run()
+    assert draft.steps == baseline.steps
+    assert [(i.step_index, i.level, i.message) for i in draft.issues] == [(2, "error", REVIEW_ERR)]

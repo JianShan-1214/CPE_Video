@@ -18,11 +18,15 @@ export type GenerateDraftInput = {
   problemStatement: string;
   solutionCode: string;
   withAnimation?: boolean;
+  sampleInput?: string;
+  sampleOutput?: string;
 };
 
 export type ProblemStatement = {
   uvaId: number;
   problemStatement: string;
+  sampleInput: string;
+  sampleOutput: string;
 };
 
 export type DraftIssue = {
@@ -132,6 +136,8 @@ export class ApiClient {
         theme: job.theme,
         width: job.width,
         steps: job.steps,
+        sampleInput: job.sampleInput ?? "",
+        sampleOutput: job.sampleOutput ?? "",
       }),
     });
   }
@@ -169,6 +175,18 @@ export class ApiClient {
       body: JSON.stringify({ steps, ai }),
     });
     return body.issues;
+  }
+
+  /** Rebuild `animation` for steps with a `trace` by running the code on the sample input (no LLM). */
+  traceDraft(
+    steps: DraftStep[],
+    sampleInput: string,
+    sampleOutput: string,
+  ): Promise<{ steps: DraftStep[]; issues: DraftIssue[] }> {
+    return this.requestJson("/api/drafts/trace", {
+      method: "POST",
+      body: JSON.stringify({ steps, sampleInput, sampleOutput }),
+    });
   }
 
   createRenderJob(input: CreateRenderJobInput): Promise<RenderJob> {

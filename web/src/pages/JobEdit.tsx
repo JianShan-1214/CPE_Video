@@ -1,5 +1,5 @@
-import { ArrowLeft, Film, ListChecks, Loader2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ArrowLeft, Film, ListChecks, Loader2, Play, TerminalSquare } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { IssueList } from "@/components/DraftIssues";
 import { ExportDialog } from "@/components/ExportDialog";
@@ -10,7 +10,7 @@ import { VideoSettings } from "@/components/VideoSettings";
 import { apiClient, type DraftIssue } from "@/lib/api-client";
 import { countByStep, sortIssues } from "@/lib/draft-issues";
 import type { DraftStep, Job } from "@/lib/draft-types";
-import { reorderSteps } from "@/lib/step-order";
+import { applyTraceAnimations, reorderSteps } from "@/lib/step-order";
 import { useDebouncedValue, useJob } from "@/lib/use-job";
 
 function makeEmptyStep(index: number): DraftStep {
@@ -32,10 +32,15 @@ export function JobEdit() {
   const [exportOpen, setExportOpen] = useState(false);
   // `steps` is the array that was checked: any edit replaces job.steps, so a
   // reference mismatch means the results are stale.
-  const [check, setCheck] = useState<{ issues: DraftIssue[]; steps: DraftStep[] } | null>(null);
+  const [check, setCheck] = useState<{ issues: DraftIssue[]; steps: DraftStep[]; title: string } | null>(null);
   const [checking, setChecking] = useState(false);
   const [checkError, setCheckError] = useState<string | null>(null);
   const issueCounts = useMemo(() => countByStep(check?.issues ?? []), [check]);
+  const [tracing, setTracing] = useState(false);
+  // Bumped after 「重新產生動畫」 so the step editor remounts and shows the new animation JSON.
+  const [traceRuns, setTraceRuns] = useState(0);
+  const jobRef = useRef(job);
+  jobRef.current = job;
 
   const previewJob = useDebouncedValue(job, 300);
 
@@ -119,11 +124,30 @@ export function JobEdit() {
     setCheckError(null);
     try {
       const issues = await apiClient.checkDraft(steps, true);
-      setCheck({ issues: sortIssues(issues), steps });
+      setCheck({ issues: sortIssues(issues), steps, title: "檢查結果" });
     } catch (e: unknown) {
       setCheckError(e instanceof Error ? e.message : String(e));
     } finally {
       setChecking(false);
+    }
+  };
+
+  const handleTrace = async () => {
+    const sent = job.steps;
+    setTracing(true);
+    setCheckError(null);
+    try {
+      const result = await apiClient.traceDraft(sent, job.sampleInput ?? "", job.sampleOutput ?? "");
+      // Apply to the latest steps (the user may have kept editing while it ran).
+      const steps = applyTraceAnimations(jobRef.current?.steps ?? sent, sent, result.steps);
+      update((prev) => ({ ...prev, steps }));
+      setCheck({ issues: sortIssues(result.issues), steps, title: "動畫產生結果" });
+      setTraceRuns((n) => n + 1);
+    } catch (e: unknown) {
+      setCheck(null);
+      setCheckError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setTracing(false);
     }
   };
 
@@ -155,8 +179,18 @@ export function JobEdit() {
             onChange={(patch) => update((prev) => ({ ...prev, ...patch }))}
           />
 
+          <SampleIoPanel
+            sampleInput={job.sampleInput ?? ""}
+            sampleOutput={job.sampleOutput ?? ""}
+            onChange={(patch) => update((prev) => ({ ...prev, ...patch }))}
+            hasTrace={job.steps.some((s) => s.trace)}
+            tracing={tracing}
+            onTrace={handleTrace}
+          />
+
           {(check || checkError) && (
             <CheckResults
+              title={check?.title ?? "檢查結果"}
               issues={check?.issues ?? []}
               stale={issuesStale}
               error={checkError}
@@ -184,7 +218,7 @@ export function JobEdit() {
                 </div>
               )}
               <StepEditor
-                key={selectedIndex}
+                key={`${selectedIndex}-${traceRuns}`}
                 step={selectedStep}
                 onChange={(next) => handleStepChange(selectedIndex, next)}
               />
@@ -220,12 +254,75 @@ function remapSelectedIndex(
   return current;
 }
 
+function SampleIoPanel({
+  sampleInput,
+  sampleOutput,
+  onChange,
+  hasTrace,
+  tracing,
+  onTrace,
+}: {
+  sampleInput: string;
+  sampleOutput: string;
+  onChange: (patch: Partial<Pick<Job, "sampleInput" | "sampleOutput">>) => void;
+  hasTrace: boolean;
+  tracing: boolean;
+  onTrace: () => void;
+}) {
+  return (
+    <details className="rounded-xl border border-line bg-ink-900/60 p-4" open>
+      <summary className="flex items-center gap-2 cursor-pointer select-none">
+        <TerminalSquare size={13} className="text-faint" strokeWidth={1.8} />
+        <span className="eyebrow">範例輸入/輸出</span>
+      </summary>
+      <div className="space-y-3 pt-3">
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="field-label">範例輸入</span>
+            <textarea
+              value={sampleInput}
+              onChange={(e) => onChange({ sampleInput: e.target.value })}
+              rows={4}
+              className="input resize-y font-mono text-xs leading-relaxed"
+              spellCheck={false}
+            />
+          </label>
+          <label className="block">
+            <span className="field-label">範例輸出</span>
+            <textarea
+              value={sampleOutput}
+              onChange={(e) => onChange({ sampleOutput: e.target.value })}
+              rows={4}
+              className="input resize-y font-mono text-xs leading-relaxed"
+              spellCheck={false}
+            />
+          </label>
+        </div>
+        {/* span carries the tooltip: disabled buttons don't fire hover events */}
+        <span title={hasTrace ? "用範例輸入實際執行程式，依各步的追蹤計畫重算動畫" : "沒有任何步驟有追蹤計畫"} className="inline-block">
+          <button
+            type="button"
+            onClick={onTrace}
+            disabled={!hasTrace || tracing}
+            className="btn btn-ghost px-3 py-2 text-sm"
+          >
+            {tracing ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}
+            {tracing ? "產生中" : "重新產生動畫"}
+          </button>
+        </span>
+      </div>
+    </details>
+  );
+}
+
 function CheckResults({
+  title,
   issues,
   stale,
   error,
   onSelectStep,
 }: {
+  title: string;
   issues: DraftIssue[];
   stale: boolean;
   error: string | null;
@@ -236,7 +333,7 @@ function CheckResults({
     <div className="rounded-lg border border-line bg-ink-950/40 p-3 space-y-2">
       <div className="flex items-center justify-between gap-2">
         <span className="eyebrow">
-          檢查結果 · {errors} 錯誤 · {issues.length - errors} 警告
+          {title} · {errors} 錯誤 · {issues.length - errors} 警告
         </span>
         {stale && <span className="text-xs text-faint">已修改，請重新檢查</span>}
       </div>

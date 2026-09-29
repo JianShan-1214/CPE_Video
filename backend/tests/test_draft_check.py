@@ -136,10 +136,10 @@ async def test_openai_review_failures_raise_runtime_error(monkeypatch):
 
 @pytest.mark.anyio
 async def test_summarize_problem_empty_choices_is_runtime_error(monkeypatch):
-    async def create(**_):
+    async def parse(**_):
         return SimpleNamespace(choices=[])
 
-    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(parse=parse)))
     monkeypatch.setattr(openai, "AsyncOpenAI", lambda **_: client)
     with pytest.raises(RuntimeError):
         await OpenAIGeneratorProvider(api_key="sk-test", model="m").summarize_problem(b"%PDF", 100)
