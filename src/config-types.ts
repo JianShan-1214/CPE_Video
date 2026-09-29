@@ -45,7 +45,33 @@ export type StepJSON = {
   highlight?: HighlightConfigJSON;
   /** 浮動標注（可多個，也可省略）*/
   annotations?: AnnotationJSON[];
+  /** 右側演算法動畫（可省略；省略時畫面與純程式碼影片完全相同）*/
+  animation?: StepAnimation;
 };
+
+// ── 演算法動畫（keyframes 平均分配在步驟時長內）──────────────────────────────
+
+export type ArrayAnimation = {
+  type: "array";
+  frames: {
+    values: (number | string)[];
+    /** 具名指標（例：i、j）→ 指向的 index */
+    pointers?: Record<string, number>;
+    /** 要標亮的 index */
+    mark?: number[];
+    caption?: string;
+  }[];
+};
+
+export type StacksAnimation = {
+  type: "stacks";
+  /** 各堆下方的標籤 */
+  labels?: string[];
+  /** 每個 stack 由下而上的 block id */
+  frames: { stacks: (number | string)[][]; caption?: string }[];
+};
+
+export type StepAnimation = ArrayAnimation | StacksAnimation;
 
 export type VideoConfigJSON = {
   steps: StepJSON[];

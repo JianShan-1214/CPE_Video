@@ -1,12 +1,14 @@
 import React, { useMemo } from "react";
 import { interpolate, useCurrentFrame } from "remotion";
 import { SUBTITLE_HEIGHT } from "./IDEFrame";
+import { useThemeColors } from "./calculate-metadata/theme";
 
 export const SubtitleBar: React.FC<{
   subtitles: string[];
   stepDurations: number[];
 }> = ({ subtitles, stepDurations }) => {
   const frame = useCurrentFrame();
+  const colors = useThemeColors();
 
   // 從累積 frame 計算當前步驟
   const { currentStep, stepFrame } = useMemo(() => {
@@ -40,8 +42,8 @@ export const SubtitleBar: React.FC<{
     () => ({
       position: "absolute",
       inset: 0,
-      backgroundColor: "#080c10",
-      borderTop: "1px solid #21262d",
+      backgroundColor: colors.editorGroupHeader.tabsBackground,
+      borderTop: `1px solid ${colors.editorGroup.border}`,
       display: "flex",
       flexDirection: "column",
       alignItems: "center",
@@ -49,13 +51,13 @@ export const SubtitleBar: React.FC<{
       padding: "0 100px",
       gap: 10,
     }),
-    [],
+    [colors],
   );
 
   const textStyle: React.CSSProperties = {
     opacity,
     transform: `translateY(${translateY}px)`,
-    color: "#e6edf3",
+    color: colors.editor.foreground,
     fontSize: 26,
     fontFamily: "'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif",
     lineHeight: 1.55,

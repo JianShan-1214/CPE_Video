@@ -1,10 +1,10 @@
 import React from "react";
 import { Easing, interpolate, useCurrentFrame } from "remotion";
+import { useThemeColors } from "./calculate-metadata/theme";
 import { fontSize, verticalPadding } from "./font";
 import { HighlightConfig } from "./step-animations";
 
 export const LINE_HEIGHT = fontSize * 1.5; // 36px
-const DIM_BG = "rgb(13,17,23)";           // github-dark 背景色
 
 /**
  * 三層視覺效果（全部 position:absolute，跟著捲動）：
@@ -19,6 +19,8 @@ export const HighlightOverlay: React.FC<{
   totalLines: number;   // step.tokens.length
 }> = ({ config, showFromFrame, stepDuration, totalLines }) => {
   const frame = useCurrentFrame();
+  // 遮罩用編輯器背景色，淺色主題才不會蓋出一片灰
+  const dimBg = useThemeColors().editor.background;
 
   // 淡入（highlight 出現後）
   const fadeIn = interpolate(frame, [showFromFrame, showFromFrame + 14], [0, 1], {
@@ -89,7 +91,7 @@ export const HighlightOverlay: React.FC<{
             left: 0,
             right: 0,
             height: topDimHeight,
-            backgroundColor: DIM_BG,
+            backgroundColor: dimBg,
             opacity: dimOpacity,
             pointerEvents: "none",
             zIndex: 5,
@@ -106,7 +108,7 @@ export const HighlightOverlay: React.FC<{
             left: 0,
             right: 0,
             height: Math.max(0, bottomDimHeight),
-            backgroundColor: DIM_BG,
+            backgroundColor: dimBg,
             opacity: dimOpacity,
             pointerEvents: "none",
             zIndex: 5,
