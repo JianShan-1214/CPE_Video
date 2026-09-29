@@ -63,10 +63,34 @@ npm run render <影片資料夾>        # 輸出影片
           "startTime":  3.2,       // 距步驟開始幾秒後彈出（例：打字結束後）
           "theme":      "yellow"   // 標注顏色（見下方色表）
         }
-      ]
+      ],
+
+      // ── 演算法動畫（選填）──────────────────────────────
+      // 在程式碼右側畫陣列或堆疊，格式見下方「animation（選填）」
+      "animation": { "type": "array", "frames": [ /* ... */ ] }
     }
   ]
 }
+```
+
+### animation（選填）
+
+`frames` 是依序播放的關鍵格，平均分配在該步驟時長內。兩種形式：
+
+- **`array`**：每格 `values`（≤ 16 個數字或字串）；`pointers` 為 `{ 變數名: index }`，index 必須是範圍內的整數（越界不畫）；`mark` 為要標亮的 index 陣列。
+- **`stacks`**：每格 `stacks`（≤ 8 堆 × 每堆 ≤ 12 個 block，由下而上）；`labels` 為各堆名稱。block 值即 id，**同一格內不可重複**（`1` 與 `1.0` 視為相同）。
+
+每格可加 `caption`（建議 ≤ 40 字，最多顯示 2 行）。`pointers` / `mark` / `labels` / `caption` 不用時可省略或設 `null`。超過上限或格式錯誤時，整段動畫不畫。
+
+```jsonc
+"animation": {
+  "type": "array",
+  "frames": [
+    { "values": [3, 1, 2], "pointers": { "i": 0 }, "caption": "比較 3 和 1" },
+    { "values": [1, 3, 2], "pointers": { "i": 1 }, "mark": [0], "caption": "交換" }
+  ]
+}
+// 或 { "type": "stacks", "labels": ["A", "B"], "frames": [{ "stacks": [[1, 2], []] }, { "stacks": [[1], [2]] }] }
 ```
 
 ---
