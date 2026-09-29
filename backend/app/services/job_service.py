@@ -137,6 +137,7 @@ async def import_job(session: AsyncSession, payload: ImportJobRequest) -> JobRes
                     "focusLine": raw.get("focusLine"),
                     "highlight": raw.get("highlight"),
                     "annotations": raw.get("annotations"),
+                    "animation": raw.get("animation"),
                 },
             ),
         )

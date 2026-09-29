@@ -10,16 +10,18 @@ Two providers share one async interface:
 ``build_generation_provider(settings)`` picks the right one at app startup.
 """
 
+import base64
 from dataclasses import dataclass
 import json
 import logging
 import math
 from pathlib import Path
+import re
 from typing import Literal, Protocol
 
 from pydantic import BaseModel, Field, ValidationError
 
-from app.schemas import DraftStep, HighlightPreset
+from app.schemas import ArrayAnimation, DraftStep, HighlightPreset, StacksAnimation
 from app.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -33,8 +35,12 @@ class GeneratedDraft:
 
 class GeneratorProvider(Protocol):
     async def generate(
-        self, name: str | None, problem_statement: str, solution_code: str
+        self, name: str | None, problem_statement: str, solution_code: str, with_animation: bool = False
     ) -> GeneratedDraft: ...
+
+    async def summarize_problem(self, pdf: bytes, problem_id: int) -> str: ...
+
+    async def review_draft(self, steps: list[DraftStep]) -> list["DraftIssue"]: ...
 
 
 # ── shared helpers ───────────────────────────────────────────────────────────
@@ -67,14 +73,17 @@ def estimate_duration_seconds(subtitle: str) -> float:
 
 class MockGeneratorProvider:
     async def generate(
-        self, name: str | None, problem_statement: str, solution_code: str
+        self, name: str | None, problem_statement: str, solution_code: str, with_animation: bool = False
     ) -> GeneratedDraft:
         problem = _normalize_text(problem_statement)
         code = _normalize_code(solution_code)
         job_name = name.strip() if name and name.strip() else "GPT Mock Draft"
         problem_comment = _problem_comment(problem)
         code_lines = code.rstrip().split("\n")
-        middle_count = min(5, max(3, math.ceil(len(code_lines) / 6)))
+        # Never more code steps than lines, so every code step adds at least one line.
+        middle_count = min(5, len(code_lines), max(3, math.ceil(len(code_lines) / 6)))
+        # Code steps are cumulative on top of step 1's comment block.
+        offset = len(problem_comment.splitlines())
         steps: list[DraftStep] = [
             DraftStep(
                 label="題目說明",
@@ -109,11 +118,12 @@ class MockGeneratorProvider:
                     from_=previous_to,
                     to=previous_to + 7,
                     fileLabel=f"code{index + 1:02d}.cpp",
-                    fileContent=_ensure_trailing_newline("\n".join(code_lines[:end])),
+                    # Keep trailing blank lines so the file really has `end` lines.
+                    fileContent=problem_comment + "\n".join(code_lines[:end]) + "\n",
                     subtitle=_code_step_subtitle(index, middle_count),
                     highlight={
-                        "startLine": start,
-                        "endLine": end,
+                        "startLine": offset + start,
+                        "endLine": offset + end,
                         "color": _highlight_color(index, middle_count),
                     },
                 ),
@@ -126,12 +136,19 @@ class MockGeneratorProvider:
                 from_=previous_to,
                 to=previous_to + 9,
                 fileLabel=f"code{middle_count + 2:02d}.cpp",
-                fileContent=code,
+                fileContent=problem_comment + code,
                 subtitle="總結一下：這份草稿已經把題目、解法思路與完整程式串成影片步驟。接下來可以在編輯器微調字幕、高亮與標注，再匯出成可 render 的檔案。",
-                focusLine=1,
+                focusLine=offset + 1,
             ),
         )
         return GeneratedDraft(job_name=job_name, steps=steps)
+
+    async def summarize_problem(self, pdf: bytes, problem_id: int) -> str:
+        return f"UVa {problem_id}（Mock 題目摘要）\n題意：這是離線模式產生的佔位題目說明，PDF 大小 {len(pdf)} bytes。"
+
+    async def review_draft(self, steps: list[DraftStep]) -> list["DraftIssue"]:
+        # Without this, ``ai=true`` looks exactly like "AI found nothing".
+        return [DraftIssue(None, "warning", "未設定 OpenAI API key，已略過 AI 審稿")]
 
 
 def _problem_comment(problem_statement: str) -> str:
@@ -177,6 +194,36 @@ class _AIHighlight(BaseModel):
     color: HighlightPreset
 
 
+# Strict structured outputs reject dicts (additionalProperties), so pointers
+# are a list of {name, index} here and become a dict in ``build_draft_from_ai``.
+class _AIPointer(BaseModel):
+    name: str
+    index: int
+
+
+class _AIArrayFrame(BaseModel):
+    values: list[int | float | str]
+    pointers: list[_AIPointer] | None = None
+    mark: list[int] | None = None
+    caption: str | None = None
+
+
+class _AIArrayAnimation(BaseModel):
+    type: Literal["array"]
+    frames: list[_AIArrayFrame]
+
+
+class _AIStacksFrame(BaseModel):
+    stacks: list[list[int | float | str]]
+    caption: str | None = None
+
+
+class _AIStacksAnimation(BaseModel):
+    type: Literal["stacks"]
+    labels: list[str] | None = None
+    frames: list[_AIStacksFrame]
+
+
 class _AIStep(BaseModel):
     label: str
     fileLabel: str
@@ -184,6 +231,8 @@ class _AIStep(BaseModel):
     subtitle: str
     highlight: _AIHighlight | None = None
     focusLine: int | None = Field(default=None, ge=1)
+    # Plain union (no discriminator): strict mode allows anyOf but not oneOf.
+    animation: _AIArrayAnimation | _AIStacksAnimation | None = None
 
 
 class _AIDraft(BaseModel):
@@ -236,6 +285,23 @@ SYSTEM_PROMPT = """\
 - jobName：影片名稱。
 - 每個 step 都要有 label / fileLabel / fileContent / subtitle；highlight 與 focusLine 不需要時設為 null。
 - fileContent 是該步驟完整的 cpp 檔內容（累加後），以換行字元分行。
+- animation：除非下方另有「演算法動畫」指示，一律設為 null。
+"""
+
+ANIMATION_PROMPT = """
+# 演算法動畫（選用）
+畫面右側可以顯示一段資料變化的動畫。只在「看到資料怎麼變」真的能幫助理解「這一步新增的程式碼」時才加
+animation（例如走訪陣列的迴圈、交換、stack/queue 的 push/pop、枚舉），其餘步驟一律設為 null。
+題目說明、解法說明、結尾這三步不加動畫。
+
+- 用很小的具體範例資料，盡量取自題目的範例輸入。
+- 每一格（frame）都必須是這段程式碼實際執行時會發生的狀態，不可以虛構程式沒做的事。
+- 兩種型態：
+  - {"type": "array", "frames": [{"values": [...], "pointers": [{"name": "i", "index": 0}], "mark": [0], "caption": "..."}]}
+    pointers 的 name 用程式碼裡的變數名稱，index 是 values 內的 0 起算位置；mark 是要標亮的位置；不需要時設為 null。
+  - {"type": "stacks", "labels": ["A", "B"], "frames": [{"stacks": [[1, 2], [3]], "caption": "..."}]}
+    每個 stack 由下而上列出 block；同一格內 block 不可重複。
+- 限制：values 最多 12 個、最多 8 格、caption 最多 30 字（繁體中文，說明這一格發生什麼）。
 """
 
 # Finished video under ``public/`` used as the few-shot reference example.
@@ -282,8 +348,11 @@ def _is_subsequence(needle: list[str], haystack: list[str]) -> bool:
     return all(line in it for line in needle)
 
 
-def validate_draft(steps: list[DraftStep], solution_code: str) -> list[DraftIssue]:
+def validate_draft(steps: list[DraftStep], solution_code: str | None) -> list[DraftIssue]:
     """Check a draft against the script rules in ``skill.md``.
+
+    ``solution_code=None`` (the editor keeps no pasted solution) skips the
+    last-step-equals-solution rule.
 
     ``error`` issues break the video (and trigger an AI retry); ``warning``
     issues are style hints for the editor.
@@ -297,7 +366,8 @@ def validate_draft(steps: list[DraftStep], solution_code: str) -> list[DraftIssu
         n = index + 1
         line_count = len(step.fileContent.splitlines())
 
-        if index > 0 and not _is_subsequence(_non_blank(steps[index - 1].fileContent), _non_blank(step.fileContent)):
+        cumulative_ok = index == 0 or _is_subsequence(_non_blank(steps[index - 1].fileContent), _non_blank(step.fileContent))
+        if not cumulative_ok:
             issues.append(DraftIssue(index, "error", f"第 {n} 步不是累加式：沒有完整保留第 {n - 1} 步的程式碼（順序須一致）。"))
 
         if step.focusLine is not None and not 1 <= step.focusLine <= line_count:
@@ -310,7 +380,7 @@ def validate_draft(steps: list[DraftStep], solution_code: str) -> list[DraftIssu
                     DraftIssue(index, "error", f"第 {n} 步的 highlight {start}–{end} 無效（檔案共 {line_count} 行，且起始行不能大於結束行）。"),
                 )
 
-        if 2 <= index <= last - 1:
+        if 2 <= index <= last - 1 and cumulative_ok:  # a line count diff is meaningless once lines were dropped
             added = len(_non_blank(step.fileContent)) - len(_non_blank(steps[index - 1].fileContent))
             if not 1 <= added <= 12:
                 issues.append(DraftIssue(index, "warning", f"第 {n} 步新增了 {added} 行程式碼，建議每步新增 1–12 行。"))
@@ -320,8 +390,11 @@ def validate_draft(steps: list[DraftStep], solution_code: str) -> list[DraftIssu
         if not 30 <= chars <= max_chars:
             issues.append(DraftIssue(index, "warning", f"第 {n} 步字幕有 {chars} 字，建議 30–{max_chars} 字。"))
 
+        if step.animation is not None:
+            issues += _animation_issues(index, step)
+
     # The last file = step 1's problem comment block + the pasted solution.
-    if _non_blank(steps[last].fileContent) != _non_blank(steps[0].fileContent) + _non_blank(solution_code):
+    if solution_code is not None and _non_blank(steps[last].fileContent) != _non_blank(steps[0].fileContent) + _non_blank(solution_code):
         issues.append(
             DraftIssue(last, "error", f"最後一步（第 {last + 1} 步）的內容必須等於「第 1 步的題目註解」加上使用者提供的完整解答（忽略空行後逐行比對）。"),
         )
@@ -329,15 +402,75 @@ def validate_draft(steps: list[DraftStep], solution_code: str) -> list[DraftIssu
     return issues
 
 
+# Renderer limits — keep in sync with src/animation-layout.ts.
+MAX_ARRAY_VALUES = 16
+MAX_STACKS = 8
+MAX_STACK_HEIGHT = 12
+MAX_CAPTION_CHARS = 40
+
+
+def _animation_issues(index: int, step: DraftStep) -> list[DraftIssue]:
+    """Errors = the renderer would drop the whole animation; warnings = it plays but may mislead."""
+    n = index + 1
+    anim = step.animation
+    errors: list[str] = []
+    warnings: list[str] = []
+    if not anim.frames:
+        errors.append("沒有任何 frame")
+    if isinstance(anim, StacksAnimation) and anim.labels is not None and len(anim.labels) > MAX_STACKS:
+        errors.append(f"labels 有 {len(anim.labels)} 個，上限 {MAX_STACKS}")
+    for f, frame in enumerate(anim.frames, 1):
+        if isinstance(anim, ArrayAnimation):
+            size = len(frame.values)
+            if size > MAX_ARRAY_VALUES:
+                errors.append(f"第 {f} 格有 {size} 個值，上限 {MAX_ARRAY_VALUES}")
+            for name, i in (frame.pointers or {}).items():
+                if not 0 <= i < size:
+                    warnings.append(f"第 {f} 格的指標 {name}={i} 超出範圍 0–{size - 1}")
+            for i in frame.mark or []:
+                if not 0 <= i < size:
+                    warnings.append(f"第 {f} 格的 mark {i} 超出範圍 0–{size - 1}")
+        else:
+            if len(frame.stacks) > MAX_STACKS:
+                errors.append(f"第 {f} 格有 {len(frame.stacks)} 個 stack，上限 {MAX_STACKS}")
+            if any(len(stack) > MAX_STACK_HEIGHT for stack in frame.stacks):
+                errors.append(f"第 {f} 格有 stack 超過 {MAX_STACK_HEIGHT} 個 block")
+            # Match JS String(): 1.0 → "1", so [[1], [1.0]] is a duplicate there too.
+            blocks = [str(int(b)) if isinstance(b, float) and b.is_integer() else str(b) for stack in frame.stacks for b in stack]
+            if len(set(blocks)) != len(blocks):
+                # The renderer can't tell which block moved, so it drops the animation.
+                errors.append(f"第 {f} 格有重複的 block id")
+        if frame.caption is not None and len(frame.caption) > MAX_CAPTION_CHARS:
+            warnings.append(f"第 {f} 格說明有 {len(frame.caption)} 字，建議 ≤ {MAX_CAPTION_CHARS} 字")
+    if isinstance(anim, ArrayAnimation):
+        names = dict.fromkeys(name for frame in anim.frames for name in (frame.pointers or {}))
+        for name in names:
+            if not re.search(rf"(?<!\w){re.escape(name)}(?!\w)", step.fileContent):
+                warnings.append(f"指標 {name} 沒有出現在這一步的程式碼裡")
+    return [DraftIssue(index, "error", f"第 {n} 步的動畫無法播放：{e}。") for e in errors] + [
+        DraftIssue(index, "warning", f"第 {n} 步的動畫：{w}。") for w in warnings
+    ]
+
+
 # ── AI → draft ───────────────────────────────────────────────────────────────
 
 
-def build_draft_from_ai(ai: _AIDraft, fallback_name: str) -> GeneratedDraft:
+def _animation_from_ai(anim: _AIArrayAnimation | _AIStacksAnimation | None) -> dict | None:
+    if anim is None:
+        return None
+    data = anim.model_dump()
+    if isinstance(anim, _AIArrayAnimation):
+        for frame, ai_frame in zip(data["frames"], anim.frames):
+            frame["pointers"] = {p.name: p.index for p in ai_frame.pointers} if ai_frame.pointers else None
+    return data
+
+
+def build_draft_from_ai(ai: _AIDraft, fallback_name: str, with_animation: bool = False) -> GeneratedDraft:
     """Convert the model output into ``DraftStep``s.
 
     Highlight ranges are recomputed from the diff against the previous step —
     the model's own line numbers are unreliable. Its color (and a null
-    highlight) is kept.
+    highlight) is kept. Animations are dropped unless ``with_animation``.
     """
     job_name = ai.jobName.strip() or fallback_name
     steps: list[DraftStep] = []
@@ -362,6 +495,7 @@ def build_draft_from_ai(ai: _AIDraft, fallback_name: str) -> GeneratedDraft:
                 subtitle=ai_step.subtitle,
                 focusLine=ai_step.focusLine,
                 highlight=highlight,
+                animation=_animation_from_ai(ai_step.animation) if with_animation else None,
             ),
         )
         cursor += duration
@@ -420,7 +554,7 @@ class OpenAIGeneratorProvider:
         self._example_messages = load_example_messages(example_dir) if example_dir else []
 
     async def generate(
-        self, name: str | None, problem_statement: str, solution_code: str
+        self, name: str | None, problem_statement: str, solution_code: str, with_animation: bool = False
     ) -> GeneratedDraft:
         from openai import AsyncOpenAI
 
@@ -428,9 +562,10 @@ class OpenAIGeneratorProvider:
         code = _normalize_code(solution_code)
         fallback_name = name.strip() if name and name.strip() else "AI 生成草稿"
 
-        client = AsyncOpenAI(api_key=self._api_key)
+        # A full draft is a long completion: generous timeout, but no 600s × 3 hang.
+        client = AsyncOpenAI(api_key=self._api_key, timeout=180, max_retries=1)
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": SYSTEM_PROMPT + (ANIMATION_PROMPT if with_animation else "")},
             *self._example_messages,
             {"role": "user", "content": _user_prompt(problem, code, fallback_name)},
         ]
@@ -463,7 +598,7 @@ class OpenAIGeneratorProvider:
                 messages.append({"role": "user", "content": f"上一個回覆無法使用（{last_error}）。請依指示回傳完整的 JSON。"})
                 continue
 
-            draft = build_draft_from_ai(ai_draft, fallback_name)
+            draft = build_draft_from_ai(ai_draft, fallback_name, with_animation)
             issues = validate_draft(draft.steps, code)
             best = (draft, issues)
             errors = [issue.message for issue in issues if issue.level == "error"]
@@ -484,6 +619,123 @@ class OpenAIGeneratorProvider:
         for issue in issues:
             logger.log(logging.WARNING if issue.level == "error" else logging.INFO, "AI draft issue: %s", issue.message)
         return draft
+
+    async def summarize_problem(self, pdf: bytes, problem_id: int) -> str:
+        from openai import AsyncOpenAI
+
+        client = AsyncOpenAI(api_key=self._api_key, timeout=120, max_retries=1)
+        file_data = f"data:application/pdf;base64,{base64.b64encode(pdf).decode()}"
+        try:
+            response = await client.chat.completions.create(
+                model=self._model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": PROBLEM_PROMPT.format(problem_id=problem_id)},
+                            {"type": "file", "file": {"filename": f"{problem_id}.pdf", "file_data": file_data}},
+                        ],
+                    },
+                ],
+            )
+            text = (response.choices[0].message.content or "").strip()
+        except Exception as exc:  # noqa: BLE001 — surfaced as a 502 upstream
+            raise RuntimeError(f"OpenAI 請求失敗：{exc}") from exc
+        if not text:
+            raise RuntimeError("OpenAI 沒有回傳題目內容")
+        return text
+
+    async def review_draft(self, steps: list[DraftStep]) -> list[DraftIssue]:
+        from openai import AsyncOpenAI
+
+        client = AsyncOpenAI(api_key=self._api_key, timeout=120, max_retries=1)
+        try:
+            response = await client.chat.completions.parse(
+                model=self._model,
+                messages=[
+                    {"role": "system", "content": REVIEW_PROMPT},
+                    {"role": "user", "content": review_user_prompt(steps)},
+                ],
+                response_format=_AIReview,
+            )
+            message = response.choices[0].message
+        except Exception as exc:  # noqa: BLE001 — reported as an AI warning upstream
+            raise RuntimeError(f"OpenAI 請求失敗：{exc}") from exc
+        if message.refusal or message.parsed is None:
+            raise RuntimeError(f"OpenAI 審稿回覆無法使用：{message.refusal or '無法解析'}")
+        return [
+            DraftIssue(item.stepNumber - 1 if 1 <= item.stepNumber <= len(steps) else None, item.level, item.message)
+            for item in message.parsed.issues
+        ]
+
+
+class _AIReviewIssue(BaseModel):
+    stepNumber: int
+    level: Literal["error", "warning"]
+    message: str
+
+
+class _AIReview(BaseModel):
+    issues: list[_AIReviewIssue]
+
+
+REVIEW_PROMPT = """\
+你是「CPE Video」教學影片的審稿員。使用者會給你一支影片的逐步腳本：每一步有畫面上顯示的 C++ 程式碼（附行號）、
+這一步新增的行、畫面上標亮（highlight）的行與畫面對齊的行（focusLine），以及這一步的旁白字幕。
+字幕裡的「這裡」「這一行」指的是標亮的行；沒有標亮時指的是 focusLine 或新增的行。
+核心原則：旁白絕對不能和畫面上的程式碼不一致。
+
+請逐步比對字幕與該步的程式碼、新增的行，只回報「具體的問題」：
+- 字幕描述了畫面上沒有的程式碼，或提到之後步驟才會加入的程式碼。
+- 這一步新增了程式碼，字幕卻完全沒有解釋它。
+- 事實或演算法上的錯誤（例如把邏輯、變數用途、邊界條件講錯）。
+- 步驟之間互相矛盾。
+- 錯誤的時間或空間複雜度說法。
+
+不要回報文風、用字、字數、語氣等風格建議。沒有問題就回傳空的 issues 陣列。
+第 1、2 步是題目與解法說明、最後一步是總結，這三步不需要逐行解釋程式碼。
+
+每個問題回傳：stepNumber（1 起算的步驟編號）、level（"error" = 內容錯誤或與程式碼矛盾；"warning" = 缺漏或可能誤導）、
+message（繁體中文，一句話具體指出問題，例如「字幕說用 map 計數，但第 12 行用的是陣列」）。
+"""
+
+
+def review_user_prompt(steps: list[DraftStep]) -> str:
+    parts: list[str] = []
+    previous = ""
+    for index, step in enumerate(steps):
+        numbered = "\n".join(f"{n:>3} | {line}" for n, line in enumerate(step.fileContent.splitlines(), 1))
+        added = _added_line_numbers(previous, step.fileContent)
+        added_text = f"第 {min(added)}–{max(added)} 行" if added else "無"
+        highlight_text = f"第 {step.highlight.startLine}–{step.highlight.endLine} 行" if step.highlight else "無"
+        focus_text = f"第 {step.focusLine} 行" if step.focusLine is not None else "無"
+        previous = step.fileContent
+        parts.append(
+            f"## 第 {index + 1} 步「{step.label}」\n"
+            f"程式碼：\n{numbered}\n"
+            f"本步新增的行：{added_text}\n"
+            f"標亮的行：{highlight_text}\n"
+            f"focusLine：{focus_text}\n"
+            f"字幕：{step.subtitle.strip()}"
+        )
+    return "\n\n".join(parts)
+
+
+PROBLEM_PROMPT = """\
+附件是 UVa 線上解題系統第 {problem_id} 題的題目 PDF。請把它整理成繁體中文的題目說明，作為教學影片的題目文字，依序包含：
+
+題意：
+輸入格式：
+輸出格式：
+範例輸入：
+範例輸出：
+
+規則：
+- 範例輸入與範例輸出必須逐字照抄原文，各自放在 ``` 程式碼區塊中。
+- 其餘內容用純文字（不要用 markdown 標題、粗體或表格）。
+- 只描述題目，不要給任何解法、演算法或提示。
+- 只回傳題目說明本身，不要加開場白或結語。
+"""
 
 
 def build_generation_provider(settings: Settings) -> GeneratorProvider:

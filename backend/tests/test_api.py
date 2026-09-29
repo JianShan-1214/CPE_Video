@@ -111,7 +111,7 @@ async def test_generate_draft_creates_editable_job(client):
     body = response.json()
     assert body["name"] == "A plus B"
     assert len(body["steps"]) >= 4
-    assert body["steps"][-1]["focusLine"] == 1
+    assert body["steps"][-1]["focusLine"] == 4  # right after the 3-line problem comment
 
 
 @pytest.mark.anyio

@@ -1,6 +1,6 @@
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, model_serializer
 
 
 HighlightPreset = Literal["blue", "yellow", "red", "green", "lightblue"]
@@ -69,6 +69,46 @@ class AutoWidth(BaseModel):
 WidthConfig = FixedWidth | AutoWidth
 
 
+# Optional per-step algorithm animation; mirrors ``StepAnimation`` in
+# src/config-types.ts. Only the shape is enforced here — size limits are
+# reported by ``validate_draft`` so the editor can show them instead of a 422.
+AnimationValue = int | FiniteFloat | str
+
+
+class _OmitNone(BaseModel):
+    # The renderer treats ``caption: null`` etc. as invalid and drops the whole
+    # animation, so optional fields are omitted instead of sent as null.
+    @model_serializer(mode="wrap")
+    def _omit_none(self, handler):
+        return {k: v for k, v in handler(self).items() if v is not None}
+
+
+class ArrayFrame(_OmitNone):
+    values: list[AnimationValue]
+    pointers: dict[str, int] | None = None
+    mark: list[int] | None = None
+    caption: str | None = None
+
+
+class ArrayAnimation(BaseModel):
+    type: Literal["array"]
+    frames: list[ArrayFrame]
+
+
+class StacksFrame(_OmitNone):
+    stacks: list[list[AnimationValue]]
+    caption: str | None = None
+
+
+class StacksAnimation(_OmitNone):
+    type: Literal["stacks"]
+    labels: list[str] | None = None
+    frames: list[StacksFrame]
+
+
+StepAnimation = Annotated[ArrayAnimation | StacksAnimation, Field(discriminator="type")]
+
+
 class DraftStep(BaseModel):
     label: str
     from_: float = Field(alias="from")
@@ -79,8 +119,15 @@ class DraftStep(BaseModel):
     focusLine: int | None = Field(default=None, ge=1)
     highlight: HighlightConfig | None = None
     annotations: list[Annotation] | None = None
+    animation: StepAnimation | None = None
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+class CheckedDraftStep(DraftStep):
+    # Bounds live only on the check request: stored jobs may already exceed them.
+    fileContent: str = Field(max_length=50_000)
+    subtitle: str = Field(max_length=1_000)
 
 
 class JobCreateRequest(BaseModel):
@@ -114,6 +161,32 @@ class GenerateDraftRequest(BaseModel):
     name: str | None = None
     problemStatement: str
     solutionCode: str
+    withAnimation: bool = False
+
+
+class ProblemStatementRequest(BaseModel):
+    uvaId: int = Field(ge=100, le=99999)
+
+
+class ProblemStatementResponse(BaseModel):
+    uvaId: int
+    problemStatement: str
+
+
+class DraftCheckRequest(BaseModel):
+    steps: list[CheckedDraftStep] = Field(min_length=1, max_length=60)
+    ai: bool = True
+
+
+class DraftCheckIssue(BaseModel):
+    stepIndex: int | None
+    level: Literal["error", "warning"]
+    message: str
+    source: Literal["rule", "ai"]
+
+
+class DraftCheckResponse(BaseModel):
+    issues: list[DraftCheckIssue]
 
 
 class LoginRequest(BaseModel):

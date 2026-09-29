@@ -7,6 +7,7 @@ from app.services.generation_service import (
     build_draft_from_ai,
     build_generation_provider,
     estimate_duration_seconds,
+    validate_draft,
 )
 from app.settings import Settings
 
@@ -66,4 +67,18 @@ async def test_mock_provider_is_async_and_structured():
         name="X", problem_statement="說明", solution_code="int main(){}\n"
     )
     assert draft.job_name == "X"
-    assert draft.steps[-1].focusLine == 1
+    assert draft.steps[-1].focusLine == 4  # right after the 3-line problem comment
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "code",
+    ["int main(){}\n", "#include <cstdio>\nint main() {\n    int a, b;\n    scanf(\"%d %d\", &a, &b);\n"
+     "    printf(\"%d\\n\", a + b);\n    return 0;\n}\n" * 3, "x\n\n\ny\n"]
+    # A blank line at every position of a 14-line solution (chunk boundaries must not break highlights).
+    + ["".join(f"int v{i};\n" for i in range(at)) + "\n" + "".join(f"int v{i};\n" for i in range(at, 14)) for at in range(15)],
+)
+async def test_mock_draft_passes_validation(code):
+    draft = await MockGeneratorProvider().generate(name=None, problem_statement="兩數相加\n輸出總和", solution_code=code)
+    issues = validate_draft(draft.steps, code)
+    assert [i.message for i in issues if i.level == "error"] == []
