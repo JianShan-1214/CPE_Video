@@ -9,6 +9,8 @@ export function GenerateJob() {
   const [problemStatement, setProblemStatement] = useState("");
   const [solutionCode, setSolutionCode] = useState("");
   const [withAnimation, setWithAnimation] = useState(false);
+  const [sampleInput, setSampleInput] = useState("");
+  const [sampleOutput, setSampleOutput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [uvaId, setUvaId] = useState("");
@@ -26,6 +28,8 @@ export function GenerateJob() {
     try {
       const result = await apiClient.fetchProblemStatement(id);
       setProblemStatement(result.problemStatement);
+      setSampleInput(result.sampleInput);
+      setSampleOutput(result.sampleOutput);
       setName((current) => (current.trim() ? current : `UVa ${id}`));
     } catch (e: unknown) {
       setFetchError(e instanceof Error ? e.message : String(e));
@@ -52,6 +56,8 @@ export function GenerateJob() {
         problemStatement,
         solutionCode,
         withAnimation,
+        sampleInput,
+        sampleOutput,
       });
       navigate(`/jobs/${job.id}/edit`);
     } catch (e: unknown) {
@@ -127,6 +133,27 @@ export function GenerateJob() {
             />
           </Field>
 
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="範例輸入">
+              <textarea
+                value={sampleInput}
+                onChange={(e) => setSampleInput(e.target.value)}
+                rows={5}
+                className="input resize-y font-mono text-xs leading-relaxed"
+                spellCheck={false}
+              />
+            </Field>
+            <Field label="範例輸出">
+              <textarea
+                value={sampleOutput}
+                onChange={(e) => setSampleOutput(e.target.value)}
+                rows={5}
+                className="input resize-y font-mono text-xs leading-relaxed"
+                spellCheck={false}
+              />
+            </Field>
+          </div>
+
           <Field label="完整 C++ 答案">
             <textarea
               value={solutionCode}
@@ -138,14 +165,19 @@ export function GenerateJob() {
             />
           </Field>
 
-          <label className="flex items-center gap-2 text-sm text-mist cursor-pointer">
-            <input
-              type="checkbox"
-              checked={withAnimation}
-              onChange={(e) => setWithAnimation(e.target.checked)}
-            />
-            加入演算法動畫（實驗性）
-          </label>
+          <div>
+            <label className="flex items-center gap-2 text-sm text-mist cursor-pointer">
+              <input
+                type="checkbox"
+                checked={withAnimation}
+                onChange={(e) => setWithAnimation(e.target.checked)}
+              />
+              加入程式執行動畫（實驗性）
+            </label>
+            <p className="text-xs text-faint mt-1 ml-6">
+              會實際編譯並執行你的程式，動畫數值來自範例輸入的真實執行結果
+            </p>
+          </div>
 
           {error && <div className="error-banner">{error}</div>}
 

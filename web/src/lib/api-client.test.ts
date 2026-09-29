@@ -51,13 +51,15 @@ test("api client fetches a UVa problem statement", async () => {
     baseUrl: "http://api.test",
     fetchImpl: async (input, init) => {
       calls.push(`${init?.method} ${String(input)} ${String(init?.body)}`);
-      return Response.json({ uvaId: 101, problemStatement: "題意：…" });
+      return Response.json({ uvaId: 101, problemStatement: "題意：…", sampleInput: "1 2\n", sampleOutput: "3\n" });
     },
   });
 
   const result = await client.fetchProblemStatement(101);
 
   assert.equal(result.problemStatement, "題意：…");
+  assert.equal(result.sampleInput, "1 2\n");
+  assert.equal(result.sampleOutput, "3\n");
   assert.deepEqual(calls, [
     'POST http://api.test/api/problem-statement {"uvaId":101}',
   ]);
@@ -120,4 +122,44 @@ test("api client sends the withAnimation flag", async () => {
   await client.generateDraft({ problemStatement: "p", solutionCode: "c", withAnimation: true });
 
   assert.deepEqual(JSON.parse(bodies[0]), { problemStatement: "p", solutionCode: "c", withAnimation: true });
+});
+
+test("api client sends sample I/O with generate and job updates", async () => {
+  const bodies: unknown[] = [];
+  const client = new ApiClient({
+    baseUrl: "http://api.test",
+    fetchImpl: async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return Response.json({ id: "job-1" });
+    },
+  });
+
+  await client.generateDraft({ problemStatement: "p", solutionCode: "c", sampleInput: "1\n", sampleOutput: "2\n" });
+  const job = { id: "j", name: "n", createdAt: 0, updatedAt: 0, theme: "github-dark" as const, width: { type: "auto" as const }, steps: [] };
+  await client.updateJob("j", { ...job, sampleInput: "3\n", sampleOutput: "4\n" });
+  await client.updateJob("j", job);
+
+  assert.deepEqual(bodies[0], { problemStatement: "p", solutionCode: "c", sampleInput: "1\n", sampleOutput: "2\n" });
+  assert.deepEqual(bodies[1], { name: "n", theme: "github-dark", width: { type: "auto" }, steps: [], sampleInput: "3\n", sampleOutput: "4\n" });
+  assert.deepEqual(bodies[2], { name: "n", theme: "github-dark", width: { type: "auto" }, steps: [], sampleInput: "", sampleOutput: "" });
+});
+
+test("api client posts steps + sample I/O to the trace endpoint", async () => {
+  const calls: string[] = [];
+  const traced = { steps: [{ label: "a" }], issues: [{ stepIndex: 0, level: "error", message: "錯", source: "rule" }] };
+  const client = new ApiClient({
+    baseUrl: "http://api.test",
+    fetchImpl: async (input, init) => {
+      calls.push(`${init?.method} ${String(input)} ${String(init?.body)}`);
+      return Response.json(traced);
+    },
+  });
+  const step = { label: "a", from: 0, to: 5, fileLabel: "c.cpp", fileContent: "x\n", subtitle: "s" };
+
+  const result = await client.traceDraft([step], "1 2\n", "3\n");
+
+  assert.deepEqual(result, traced);
+  assert.deepEqual(calls, [
+    `POST http://api.test/api/drafts/trace ${JSON.stringify({ steps: [step], sampleInput: "1 2\n", sampleOutput: "3\n" })}`,
+  ]);
 });
