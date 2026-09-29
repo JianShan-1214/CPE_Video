@@ -39,6 +39,7 @@ def build_render_files(job: JobResponse, folder_name: str | None) -> tuple[str, 
         raw = step.model_dump(by_alias=True, exclude_none=True)
         raw["file"] = raw.pop("fileLabel")
         raw.pop("fileContent")
+        raw.pop("trace", None)  # editor-only plan; the renderer plays ``animation``
         config_steps.append(raw)
     return normalized, json.dumps({"steps": config_steps}, ensure_ascii=False, indent=2), cpp_files
 

@@ -123,6 +123,7 @@ async def test_problem_statement_endpoint(client, monkeypatch):
     body = response.json()
     assert body["uvaId"] == 101
     assert "UVa 101" in body["problemStatement"]
+    assert (body["sampleInput"], body["sampleOutput"]) == ("", "")
 
 
 @pytest.mark.anyio
@@ -153,17 +154,18 @@ async def test_openai_summarize_sends_pdf_file_part(monkeypatch):
         def __init__(self, api_key, **client_kwargs):
             captured["client"] = client_kwargs
 
-            async def create(**kwargs):
+            async def parse(**kwargs):
                 captured.update(kwargs)
-                message = SimpleNamespace(content=" 題意：... \n")
-                return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+                parsed = kwargs["response_format"](statement=" 題意：... \n", sampleInput="3\n1 2 3\n", sampleOutput="6\n")
+                return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(parsed=parsed))])
 
-            self.chat = SimpleNamespace(completions=SimpleNamespace(create=create))
+            self.chat = SimpleNamespace(completions=SimpleNamespace(parse=parse))
 
     monkeypatch.setattr(openai, "AsyncOpenAI", FakeClient)
-    text = await OpenAIGeneratorProvider(api_key="k", model="m").summarize_problem(PDF, 101)
+    summary = await OpenAIGeneratorProvider(api_key="k", model="m").summarize_problem(PDF, 101)
 
-    assert text == "題意：..."
+    assert (summary.statement, summary.sampleInput, summary.sampleOutput) == ("題意：...", "3\n1 2 3\n", "6\n")
+    assert set(captured["response_format"].model_fields) == {"statement", "sampleInput", "sampleOutput"}
     assert captured["client"] == {"timeout": 120, "max_retries": 1}
     file_part = captured["messages"][0]["content"][1]
     assert file_part == {

@@ -5,12 +5,14 @@ from app.schemas import (
     DraftCheckIssue,
     DraftCheckRequest,
     DraftCheckResponse,
+    DraftTraceRequest,
+    DraftTraceResponse,
     GenerateDraftRequest,
     JobResponse,
     ProblemStatementRequest,
     ProblemStatementResponse,
 )
-from app.services.generation_service import GeneratorProvider, validate_draft
+from app.services.generation_service import GeneratorProvider, trace_draft, validate_draft
 from app.services.job_service import save_generated_job
 from app.services.problem_service import ProblemFetchError, fetch_uva_pdf
 
@@ -28,12 +30,16 @@ async def generate_draft(
             problem_statement=payload.problemStatement,
             solution_code=payload.solutionCode,
             with_animation=payload.withAnimation,
+            sample_input=payload.sampleInput,
+            sample_output=payload.sampleOutput,
         )
     except RuntimeError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
         ) from exc
-    return await save_generated_job(session, draft.job_name, draft.steps)
+    return await save_generated_job(
+        session, draft.job_name, draft.steps, sample_input=payload.sampleInput, sample_output=payload.sampleOutput
+    )
 
 
 @router.post("/problem-statement", response_model=ProblemStatementResponse)
@@ -46,12 +52,17 @@ async def problem_statement(
     except ProblemFetchError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     try:
-        text = await provider.summarize_problem(pdf, payload.uvaId)
+        summary = await provider.summarize_problem(pdf, payload.uvaId)
     except RuntimeError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
         ) from exc
-    return ProblemStatementResponse(uvaId=payload.uvaId, problemStatement=text)
+    return ProblemStatementResponse(
+        uvaId=payload.uvaId,
+        problemStatement=summary.statement,
+        sampleInput=summary.sampleInput,
+        sampleOutput=summary.sampleOutput,
+    )
 
 
 @router.post("/drafts/check", response_model=DraftCheckResponse)
@@ -73,3 +84,15 @@ async def check_draft(payload: DraftCheckRequest, request: Request) -> DraftChec
                 for i in reviewed
             ]
     return DraftCheckResponse(issues=issues)
+
+
+@router.post("/drafts/trace", response_model=DraftTraceResponse)
+async def trace_draft_endpoint(payload: DraftTraceRequest) -> DraftTraceResponse:
+    """Rebuild ``animation`` for every step with a ``trace`` plan by running the code (no LLM)."""
+    steps, issues = await trace_draft(payload.steps, payload.sampleInput, payload.sampleOutput)
+    return DraftTraceResponse(
+        steps=steps,
+        issues=[
+            DraftCheckIssue(stepIndex=i.step_index, level=i.level, message=i.message, source="rule") for i in issues
+        ],
+    )
