@@ -1,14 +1,12 @@
-import json
-
 import pytest
 
 from app.services.generation_service import (
     MockGeneratorProvider,
     OpenAIGeneratorProvider,
+    _AIDraft,
     build_draft_from_ai,
     build_generation_provider,
     estimate_duration_seconds,
-    parse_ai_response,
 )
 from app.settings import Settings
 
@@ -35,20 +33,8 @@ SAMPLE = {
 }
 
 
-def test_parse_ai_response_accepts_plain_json():
-    draft = parse_ai_response(json.dumps(SAMPLE, ensure_ascii=False))
-    assert draft.jobName == "A + B"
-    assert len(draft.steps) == 2
-
-
-def test_parse_ai_response_tolerates_code_fence():
-    fenced = "```json\n" + json.dumps(SAMPLE, ensure_ascii=False) + "\n```"
-    draft = parse_ai_response(fenced)
-    assert len(draft.steps) == 2
-
-
 def test_build_draft_computes_monotonic_timings_and_keeps_fields():
-    ai = parse_ai_response(json.dumps(SAMPLE, ensure_ascii=False))
+    ai = _AIDraft.model_validate(SAMPLE)
     draft = build_draft_from_ai(ai, fallback_name="fallback")
     assert draft.job_name == "A + B"
     steps = draft.steps

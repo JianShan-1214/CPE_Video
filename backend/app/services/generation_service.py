@@ -12,13 +12,17 @@ Two providers share one async interface:
 
 from dataclasses import dataclass
 import json
+import logging
 import math
-from typing import Protocol
+from pathlib import Path
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, Field, ValidationError
 
 from app.schemas import DraftStep, HighlightPreset
 from app.settings import Settings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -208,7 +212,8 @@ SYSTEM_PROMPT = """\
    - subtitle 用「解法很單純：」「核心想法是」等開頭，交代演算法策略（枚舉什麼／驗證什麼／為什麼可行），80–100 字。
 
 3. 中間步驟 (fileLabel = "code02.cpp"、"code03.cpp" …)：
-   - 每步新增 1–5 行程式碼，採「累加式」：codeNN.cpp 的 fileContent 必須包含前面所有步驟的程式碼，再加上這一步的新行（不是只有新增片段）。
+   - 每步新增 1–12 行程式碼，採「累加式」：codeNN.cpp 的 fileContent 必須包含前面所有步驟的程式碼，再加上這一步的新行（不是只有新增片段）。
+   - 已經出現過的行不可以再修改或重新縮排；每一行一出現就必須是最終解答裡的樣子，講解才不會和程式碼不一致。
    - highlight.startLine / endLine 指向「這一步新增的行範圍」（1-indexed，以該步累加後的檔案計算）。
    - highlight.color 依性質選：blue=一般宣告、yellow=迴圈/流程、red=條件判斷、green=輸出/關鍵操作、lightblue=函式宣告；一步有多種性質時取主要操作的顏色。
 
@@ -222,57 +227,138 @@ SYSTEM_PROMPT = """\
 - 合理步數通常 8–15 步（含題目、解法、結尾三個結構性步驟），依程式長度調整。
 - 累加式 cpp：每個 codeNN.cpp 包含所有先前步驟的程式碼，保留原始縮排與格式。
 - 結構性步驟（解法說明、結尾）省略 highlight。
-- subtitle 為引導式旁白，以「接下來」「這裡」「我們」等開頭，說明「做什麼」與「為什麼」，一般步驟 30–60 字。
+- subtitle 為引導式旁白，以「接下來」「這裡」「我們」等開頭，說明「做什麼」與「為什麼」，一般步驟 30–80 字。
 - label 是時間軸上的簡短標題。
 - 全部文字使用繁體中文。
+- 最後一步的 fileContent 去掉註解後，必須與使用者提供的完整解答逐行一致。
 
-# 回傳格式（只回傳這個 JSON 物件）
-{
-  "jobName": "影片名稱",
-  "steps": [
-    {
-      "label": "題目說明",
-      "fileLabel": "code01.cpp",
-      "fileContent": "/*\\n * ...\\n */\\n",
-      "subtitle": "...",
-      "highlight": { "startLine": 1, "endLine": 3, "color": "blue" },
-      "focusLine": null
-    }
-  ]
-}
-每個 step 都要有 label / fileLabel / fileContent / subtitle 四個欄位；highlight 與 focusLine 不需要時設為 null。
+# 欄位說明
+- jobName：影片名稱。
+- 每個 step 都要有 label / fileLabel / fileContent / subtitle；highlight 與 focusLine 不需要時設為 null。
+- fileContent 是該步驟完整的 cpp 檔內容（累加後），以換行字元分行。
 """
 
+# Finished video under ``public/`` used as the few-shot reference example.
+EXAMPLE_FOLDER = "26D4_false_coin"
+EXAMPLE_INTRO = "以下是一支已完成影片的參考範例。請模仿它的風格、步數切分方式與字幕語氣，不要沿用它的內容。"
 
-def parse_ai_response(content: str) -> _AIDraft:
-    """Validate the model's JSON output into an ``_AIDraft``.
 
-    Tolerates an accidental ```json fence around the object.
+# ── draft validation ─────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class DraftIssue:
+    step_index: int | None  # 0-based; None = whole draft
+    level: Literal["error", "warning"]
+    message: str
+
+
+def _added_line_numbers(previous: str, current: str) -> list[int]:
+    """1-indexed non-blank lines of ``current`` inside the region changed vs ``previous``.
+
+    Trims the common prefix first, then the common suffix, so an insertion
+    next to an identical line (a new function after another one's ``}``) is
+    placed at the earliest position. Two separate edits yield the span
+    between them — fine, callers only use min..max.
     """
-    text = content.strip()
-    if text.startswith("```"):
-        text = text.split("\n", 1)[1] if "\n" in text else text
-        if text.endswith("```"):
-            text = text[:-3]
-        text = text.removeprefix("json").strip()
-    data = json.loads(text)
-    return _AIDraft.model_validate(data)
+    old = [line.rstrip() for line in previous.splitlines()]
+    new = [line.rstrip() for line in current.splitlines()]
+    start = 0
+    while start < min(len(old), len(new)) and old[start] == new[start]:
+        start += 1
+    old_end, new_end = len(old), len(new)
+    while old_end > start and new_end > start and old[old_end - 1] == new[new_end - 1]:
+        old_end -= 1
+        new_end -= 1
+    return [j + 1 for j in range(start, new_end) if new[j].strip()]
+
+
+def _non_blank(content: str) -> list[str]:
+    return [line.rstrip().expandtabs(4) for line in content.splitlines() if line.strip()]
+
+
+def _is_subsequence(needle: list[str], haystack: list[str]) -> bool:
+    it = iter(haystack)
+    return all(line in it for line in needle)
+
+
+def validate_draft(steps: list[DraftStep], solution_code: str) -> list[DraftIssue]:
+    """Check a draft against the script rules in ``skill.md``.
+
+    ``error`` issues break the video (and trigger an AI retry); ``warning``
+    issues are style hints for the editor.
+    """
+    issues: list[DraftIssue] = []
+    if not steps:
+        return issues
+    last = len(steps) - 1
+
+    for index, step in enumerate(steps):
+        n = index + 1
+        line_count = len(step.fileContent.splitlines())
+
+        if index > 0 and not _is_subsequence(_non_blank(steps[index - 1].fileContent), _non_blank(step.fileContent)):
+            issues.append(DraftIssue(index, "error", f"第 {n} 步不是累加式：沒有完整保留第 {n - 1} 步的程式碼（順序須一致）。"))
+
+        if step.focusLine is not None and not 1 <= step.focusLine <= line_count:
+            issues.append(DraftIssue(index, "error", f"第 {n} 步的 focusLine={step.focusLine} 超出檔案範圍 1–{line_count}。"))
+
+        if step.highlight is not None:
+            start, end = step.highlight.startLine, step.highlight.endLine
+            if not (1 <= start <= end <= line_count):
+                issues.append(
+                    DraftIssue(index, "error", f"第 {n} 步的 highlight {start}–{end} 無效（檔案共 {line_count} 行，且起始行不能大於結束行）。"),
+                )
+
+        if 2 <= index <= last - 1:
+            added = len(_non_blank(step.fileContent)) - len(_non_blank(steps[index - 1].fileContent))
+            if not 1 <= added <= 12:
+                issues.append(DraftIssue(index, "warning", f"第 {n} 步新增了 {added} 行程式碼，建議每步新增 1–12 行。"))
+
+        max_chars = 100 if index in (0, 1, last) else 80
+        chars = len(step.subtitle.strip())
+        if not 30 <= chars <= max_chars:
+            issues.append(DraftIssue(index, "warning", f"第 {n} 步字幕有 {chars} 字，建議 30–{max_chars} 字。"))
+
+    # The last file = step 1's problem comment block + the pasted solution.
+    if _non_blank(steps[last].fileContent) != _non_blank(steps[0].fileContent) + _non_blank(solution_code):
+        issues.append(
+            DraftIssue(last, "error", f"最後一步（第 {last + 1} 步）的內容必須等於「第 1 步的題目註解」加上使用者提供的完整解答（忽略空行後逐行比對）。"),
+        )
+
+    return issues
+
+
+# ── AI → draft ───────────────────────────────────────────────────────────────
 
 
 def build_draft_from_ai(ai: _AIDraft, fallback_name: str) -> GeneratedDraft:
+    """Convert the model output into ``DraftStep``s.
+
+    Highlight ranges are recomputed from the diff against the previous step —
+    the model's own line numbers are unreliable. Its color (and a null
+    highlight) is kept.
+    """
     job_name = ai.jobName.strip() or fallback_name
     steps: list[DraftStep] = []
     cursor = 0.0
+    previous_content = ""
     for ai_step in ai.steps:
         duration = estimate_duration_seconds(ai_step.subtitle)
+        file_content = _ensure_trailing_newline(ai_step.fileContent)
         highlight = ai_step.highlight.model_dump() if ai_step.highlight else None
+        if highlight:
+            added = _added_line_numbers(previous_content, file_content)
+            if added:
+                highlight["startLine"], highlight["endLine"] = min(added), max(added)
+        previous_content = file_content
         steps.append(
             DraftStep(
                 label=ai_step.label,
                 from_=round(cursor, 1),
                 to=round(cursor + duration, 1),
                 fileLabel=ai_step.fileLabel,
-                fileContent=_ensure_trailing_newline(ai_step.fileContent),
+                fileContent=file_content,
                 subtitle=ai_step.subtitle,
                 focusLine=ai_step.focusLine,
                 highlight=highlight,
@@ -282,10 +368,56 @@ def build_draft_from_ai(ai: _AIDraft, fallback_name: str) -> GeneratedDraft:
     return GeneratedDraft(job_name=job_name, steps=steps)
 
 
+def _user_prompt(problem: str, code: str, name: str) -> str:
+    return (
+        f"題目說明：\n{problem}\n\n"
+        f"完整 C++ 解答：\n{code}\n\n"
+        f"影片名稱（若空白請自訂一個簡短名稱）：{name}"
+    )
+
+
+def load_example_messages(folder: Path) -> list[dict[str, str]]:
+    """Turn a finished video in ``public/<folder>`` into a few-shot user/assistant pair.
+
+    The problem statement is ``code01.cpp`` (the comment block); the solution is
+    the last step's file with that block removed — matching what users paste.
+    Returns ``[]`` when the folder is missing or unreadable.
+    """
+    try:
+        config = json.loads((folder / "config.json").read_text(encoding="utf-8"))
+        files = {s["file"]: (folder / s["file"]).read_text(encoding="utf-8") for s in config["steps"]}
+        steps = config["steps"]
+        problem = files[steps[0]["file"]]
+        solution = files[steps[-1]["file"]].removeprefix(problem)
+        draft = _AIDraft(
+            jobName=folder.name,
+            steps=[
+                _AIStep(
+                    label=s["label"],
+                    fileLabel=s["file"],
+                    fileContent=files[s["file"]],
+                    subtitle=s["subtitle"],
+                    highlight=s.get("highlight"),
+                    focusLine=s.get("focusLine"),
+                )
+                for s in steps
+            ],
+        )
+    except (OSError, ValueError, KeyError, TypeError, IndexError):  # ValidationError is a ValueError
+        return []
+    return [
+        {"role": "user", "content": f"{EXAMPLE_INTRO}\n\n{_user_prompt(problem.strip(), solution.strip(), folder.name)}"},
+        {"role": "assistant", "content": draft.model_dump_json()},
+    ]
+
+
 class OpenAIGeneratorProvider:
-    def __init__(self, api_key: str, model: str) -> None:
+    MAX_ATTEMPTS = 3
+
+    def __init__(self, api_key: str, model: str, example_dir: Path | None = None) -> None:
         self._api_key = api_key
         self._model = model
+        self._example_messages = load_example_messages(example_dir) if example_dir else []
 
     async def generate(
         self, name: str | None, problem_statement: str, solution_code: str
@@ -295,52 +427,71 @@ class OpenAIGeneratorProvider:
         problem = _normalize_text(problem_statement)
         code = _normalize_code(solution_code)
         fallback_name = name.strip() if name and name.strip() else "AI 生成草稿"
-        user_prompt = (
-            f"題目說明：\n{problem}\n\n"
-            f"完整 C++ 解答：\n{code}\n\n"
-            f"影片名稱（若空白請自訂一個簡短名稱）：{fallback_name}"
-        )
 
         client = AsyncOpenAI(api_key=self._api_key)
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
+            *self._example_messages,
+            {"role": "user", "content": _user_prompt(problem, code, fallback_name)},
         ]
 
         last_error: Exception | None = None
-        for _attempt in range(2):
+        best: tuple[GeneratedDraft, list[DraftIssue]] | None = None
+        for _attempt in range(self.MAX_ATTEMPTS):
             try:
-                # No temperature: newer models reject anything but the default,
-                # and the JSON schema in the prompt already pins the output shape.
-                response = await client.chat.completions.create(
+                # Structured outputs pin the shape to ``_AIDraft``. No
+                # temperature: newer models reject anything but the default.
+                response = await client.chat.completions.parse(
                     model=self._model,
                     messages=messages,
-                    response_format={"type": "json_object"},
+                    response_format=_AIDraft,
                 )
+            except ValidationError as exc:
+                last_error = exc
+                messages.append({"role": "user", "content": f"上一個回覆無法解析（{exc}）。請重新回傳完整的 JSON。"})
+                continue
             except Exception as exc:  # noqa: BLE001 — surfaced as a 502 upstream
+                if best is not None:  # a retry failed (network, truncated output): keep the draft we have
+                    logger.warning("AI retry failed, keeping previous draft: %s", exc)
+                    break
                 raise RuntimeError(f"OpenAI 請求失敗：{exc}") from exc
 
-            content = response.choices[0].message.content or ""
-            try:
-                ai_draft = parse_ai_response(content)
-                if not ai_draft.steps:
-                    raise ValueError("steps 為空")
-                return build_draft_from_ai(ai_draft, fallback_name)
-            except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-                last_error = exc
-                messages.append({"role": "assistant", "content": content})
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": f"上一個回覆無法解析（{exc}）。請只回傳符合格式的 JSON 物件，不要其他文字。",
-                    },
-                )
+            message = response.choices[0].message
+            ai_draft = message.parsed
+            if message.refusal or ai_draft is None or not ai_draft.steps:
+                last_error = ValueError(message.refusal or "沒有回傳任何步驟")
+                messages.append({"role": "user", "content": f"上一個回覆無法使用（{last_error}）。請依指示回傳完整的 JSON。"})
+                continue
 
-        raise RuntimeError(f"OpenAI 回傳的資料無法解析：{last_error}")
+            draft = build_draft_from_ai(ai_draft, fallback_name)
+            issues = validate_draft(draft.steps, code)
+            best = (draft, issues)
+            errors = [issue.message for issue in issues if issue.level == "error"]
+            if not errors:
+                break
+            messages.append({"role": "assistant", "content": message.content or ai_draft.model_dump_json()})
+            messages.append(
+                {
+                    "role": "user",
+                    "content": "上一個回覆有以下錯誤，請只修正這些問題，其餘保持不變，並重新回傳完整的 JSON：\n"
+                    + "\n".join(f"- {e}" for e in errors),
+                },
+            )
+
+        if best is None:
+            raise RuntimeError(f"OpenAI 回傳的資料無法解析：{last_error}")
+        draft, issues = best
+        for issue in issues:
+            logger.log(logging.WARNING if issue.level == "error" else logging.INFO, "AI draft issue: %s", issue.message)
+        return draft
 
 
 def build_generation_provider(settings: Settings) -> GeneratorProvider:
     api_key = settings.resolved_openai_api_key()
     if api_key:
-        return OpenAIGeneratorProvider(api_key=api_key, model=settings.resolved_openai_model())
+        return OpenAIGeneratorProvider(
+            api_key=api_key,
+            model=settings.resolved_openai_model(),
+            example_dir=settings.resolved_project_root() / "public" / EXAMPLE_FOLDER,
+        )
     return MockGeneratorProvider()
