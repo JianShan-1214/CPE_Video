@@ -27,6 +27,8 @@
   --color-accent-soft: rgba(223, 122, 94, 0.14);
   --color-danger: #d6544a;
   --color-danger-soft: rgba(214, 84, 74, 0.12);
+  --color-warn: #b7791f;
+  --color-warn-soft: rgba(183, 121, 31, 0.14);
 }
 
 @layer base {

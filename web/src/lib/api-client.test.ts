@@ -44,3 +44,80 @@ test("api client creates render jobs and downloads blobs", async () => {
     "GET http://api.test/api/render-jobs/render-1/download",
   ]);
 });
+
+test("api client fetches a UVa problem statement", async () => {
+  const calls: string[] = [];
+  const client = new ApiClient({
+    baseUrl: "http://api.test",
+    fetchImpl: async (input, init) => {
+      calls.push(`${init?.method} ${String(input)} ${String(init?.body)}`);
+      return Response.json({ uvaId: 101, problemStatement: "題意：…" });
+    },
+  });
+
+  const result = await client.fetchProblemStatement(101);
+
+  assert.equal(result.problemStatement, "題意：…");
+  assert.deepEqual(calls, [
+    'POST http://api.test/api/problem-statement {"uvaId":101}',
+  ]);
+});
+
+test("api client checks a draft and unwraps the issues", async () => {
+  const calls: string[] = [];
+  const issue = { stepIndex: 0, level: "error", message: "錯", source: "rule" };
+  const client = new ApiClient({
+    baseUrl: "http://api.test",
+    fetchImpl: async (input, init) => {
+      calls.push(`${init?.method} ${String(input)} ${String(init?.body)}`);
+      return Response.json({ issues: [issue] });
+    },
+  });
+  const step = { label: "a", from: 0, to: 5, fileLabel: "c.cpp", fileContent: "x\n", subtitle: "s" };
+
+  const issues = await client.checkDraft([step], false);
+
+  assert.deepEqual(issues, [issue]);
+  assert.deepEqual(calls, [
+    `POST http://api.test/api/drafts/check ${JSON.stringify({ steps: [step], ai: false })}`,
+  ]);
+});
+
+test("api client turns FastAPI validation arrays into readable text", async () => {
+  const client = new ApiClient({
+    baseUrl: "http://api.test",
+    fetchImpl: async () =>
+      Response.json(
+        {
+          detail: [
+            { loc: ["body", "steps", 0, "focusLine"], msg: "Input should be greater than or equal to 1" },
+            { loc: ["body", "steps"], msg: "List should have at least 1 item" },
+          ],
+        },
+        { status: 422 },
+      ),
+  });
+
+  await assert.rejects(() => client.checkDraft([], false), (e: Error) => {
+    assert.equal(
+      e.message,
+      "資料格式錯誤：第 1 步 focusLine：Input should be greater than or equal to 1；steps：List should have at least 1 item",
+    );
+    return true;
+  });
+});
+
+test("api client sends the withAnimation flag", async () => {
+  const bodies: string[] = [];
+  const client = new ApiClient({
+    baseUrl: "http://api.test",
+    fetchImpl: async (_input, init) => {
+      bodies.push(String(init?.body));
+      return Response.json({ id: "job-1" }, { status: 201 });
+    },
+  });
+
+  await client.generateDraft({ problemStatement: "p", solutionCode: "c", withAnimation: true });
+
+  assert.deepEqual(JSON.parse(bodies[0]), { problemStatement: "p", solutionCode: "c", withAnimation: true });
+});

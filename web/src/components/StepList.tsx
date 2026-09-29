@@ -15,6 +15,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Plus, Trash2 } from "lucide-react";
+import { IssueBadges } from "@/components/DraftIssues";
+import type { IssueCount } from "@/lib/draft-issues";
 import type { DraftStep } from "@/lib/draft-types";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +27,8 @@ type Props = {
   onAdd: () => void;
   onDelete: (index: number) => void;
   onReorder: (fromIndex: number, toIndex: number) => void;
+  issueCounts?: Map<number, IssueCount>;
+  issuesStale?: boolean;
 };
 
 export function StepList({
@@ -34,6 +38,8 @@ export function StepList({
   onAdd,
   onDelete,
   onReorder,
+  issueCounts,
+  issuesStale,
 }: Props) {
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -90,6 +96,8 @@ export function StepList({
                   selected={selectedIndex === i}
                   onSelect={onSelect}
                   onDelete={onDelete}
+                  issueCount={issueCounts?.get(i)}
+                  issuesStale={issuesStale}
                 />
               ))}
             </ul>
@@ -107,6 +115,8 @@ function SortableStepItem({
   selected,
   onSelect,
   onDelete,
+  issueCount,
+  issuesStale,
 }: {
   id: string;
   index: number;
@@ -114,6 +124,8 @@ function SortableStepItem({
   selected: boolean;
   onSelect: (index: number) => void;
   onDelete: (index: number) => void;
+  issueCount?: IssueCount;
+  issuesStale?: boolean;
 }) {
   const {
     attributes,
@@ -167,6 +179,7 @@ function SortableStepItem({
       >
         {step.label || <span className="text-faint">(未命名)</span>}
       </span>
+      {issueCount && <IssueBadges count={issueCount} stale={issuesStale} />}
       <button
         type="button"
         onClick={(e) => {

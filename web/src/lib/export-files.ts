@@ -38,6 +38,7 @@ export function createVideoExportFiles(
     if (step.annotations && step.annotations.length > 0) {
       out.annotations = step.annotations;
     }
+    if (step.animation) out.animation = step.animation;
 
     return out;
   });

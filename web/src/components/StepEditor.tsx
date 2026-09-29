@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import type { AnnotationJSON, HighlightPreset } from "@remotion-src/config-types";
 import { HIGHLIGHT_PRESETS } from "@remotion-src/config-types";
-import { Highlighter, MessageSquareText, Plus, Trash2 } from "lucide-react";
+import { Clapperboard, Highlighter, MessageSquareText, Plus, Trash2 } from "lucide-react";
 import type { DraftStep } from "@/lib/draft-types";
+import { parseAnimationJson, toLine, toOptionalLine, toSeconds } from "@/lib/step-fields";
 
 const HIGHLIGHT_COLOR_OPTIONS: (HighlightPreset | "none")[] = [
   "none",
@@ -102,7 +103,10 @@ export function StepEditor({ step, onChange }: Props) {
             type="number"
             step="0.1"
             value={step.from}
-            onChange={(e) => patch({ from: Number(e.target.value) })}
+            onChange={(e) => {
+              const from = toSeconds(e.target.value);
+              if (from !== null) patch({ from });
+            }}
             className="input font-mono"
           />
         </Field>
@@ -111,7 +115,10 @@ export function StepEditor({ step, onChange }: Props) {
             type="number"
             step="0.1"
             value={step.to}
-            onChange={(e) => patch({ to: Number(e.target.value) })}
+            onChange={(e) => {
+              const to = toSeconds(e.target.value);
+              if (to !== null) patch({ to });
+            }}
             className="input font-mono"
           />
         </Field>
@@ -151,10 +158,7 @@ export function StepEditor({ step, onChange }: Props) {
           type="number"
           min={1}
           value={step.focusLine ?? ""}
-          onChange={(e) => {
-            const v = e.target.value;
-            patch({ focusLine: v === "" ? undefined : Number(v) });
-          }}
+          onChange={(e) => patch({ focusLine: toOptionalLine(e.target.value) })}
           placeholder="(未設定)"
           className="input font-mono"
         />
@@ -186,7 +190,7 @@ export function StepEditor({ step, onChange }: Props) {
                   min={1}
                   value={step.highlight.startLine}
                   onChange={(e) =>
-                    setHighlightRange("startLine", Number(e.target.value))
+                    setHighlightRange("startLine", toLine(e.target.value))
                   }
                   placeholder="startLine"
                   className="input font-mono"
@@ -199,7 +203,7 @@ export function StepEditor({ step, onChange }: Props) {
                   min={1}
                   value={step.highlight.endLine}
                   onChange={(e) =>
-                    setHighlightRange("endLine", Number(e.target.value))
+                    setHighlightRange("endLine", toLine(e.target.value))
                   }
                   placeholder="endLine"
                   className="input font-mono"
@@ -233,7 +237,7 @@ export function StepEditor({ step, onChange }: Props) {
                   value={ann.targetLine}
                   onChange={(e) =>
                     updateAnnotation(i, {
-                      targetLine: Number(e.target.value),
+                      targetLine: toLine(e.target.value),
                     })
                   }
                   className="input font-mono"
@@ -244,11 +248,10 @@ export function StepEditor({ step, onChange }: Props) {
                   min={0}
                   step={0.1}
                   value={ann.startTime}
-                  onChange={(e) =>
-                    updateAnnotation(i, {
-                      startTime: Number(e.target.value),
-                    })
-                  }
+                  onChange={(e) => {
+                    const startTime = toSeconds(e.target.value, 0);
+                    if (startTime !== null) updateAnnotation(i, { startTime });
+                  }}
                   className="input font-mono"
                   aria-label={`標注 ${i + 1} 開始秒數`}
                 />
@@ -299,7 +302,58 @@ export function StepEditor({ step, onChange }: Props) {
           </button>
         </div>
       </section>
+
+      <AnimationField
+        animation={step.animation}
+        onChange={(animation) => patch({ animation })}
+      />
     </div>
+  );
+}
+
+// The textarea keeps its own text so half-typed JSON isn't lost; only a valid
+// animation (or empty → none) reaches the draft. The parent remounts this
+// editor per step, so the initial text always matches the selected step.
+function AnimationField({
+  animation,
+  onChange,
+}: {
+  animation: DraftStep["animation"];
+  onChange: (next: DraftStep["animation"]) => void;
+}) {
+  const [text, setText] = useState(() =>
+    animation ? JSON.stringify(animation, null, 2) : "",
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  const handleChange = (value: string) => {
+    setText(value);
+    const parsed = parseAnimationJson(value);
+    if (!parsed.ok) {
+      setError(parsed.error);
+      return;
+    }
+    setError(null);
+    onChange(parsed.value);
+  };
+
+  return (
+    <section className="rounded-xl border border-line bg-ink-900/60 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Clapperboard size={13} className="text-faint" strokeWidth={1.8} />
+        <span className="eyebrow">動畫（選填，JSON）</span>
+      </div>
+      <textarea
+        value={text}
+        onChange={(e) => handleChange(e.target.value)}
+        rows={6}
+        className="input resize-y font-mono text-xs leading-relaxed"
+        spellCheck={false}
+        placeholder='{"type": "array", "frames": [{"values": [3, 1, 2], "pointers": {"i": 0}}]}'
+        aria-label="動畫 JSON"
+      />
+      {error && <div className="error-banner">{error}（尚未套用）</div>}
+    </section>
   );
 }
 

@@ -1,4 +1,4 @@
-import type { Job } from "./draft-types";
+import type { DraftStep, Job } from "./draft-types";
 import { clearToken, getToken } from "./auth.ts";
 
 export type JobSummary = Pick<Job, "id" | "name" | "createdAt" | "updatedAt" | "steps">;
@@ -17,6 +17,19 @@ export type GenerateDraftInput = {
   name?: string;
   problemStatement: string;
   solutionCode: string;
+  withAnimation?: boolean;
+};
+
+export type ProblemStatement = {
+  uvaId: number;
+  problemStatement: string;
+};
+
+export type DraftIssue = {
+  stepIndex: number | null; // 0-based; null = whole draft
+  level: "error" | "warning";
+  message: string;
+  source: "rule" | "ai";
 };
 
 export type RenderJob = {
@@ -143,6 +156,21 @@ export class ApiClient {
     });
   }
 
+  fetchProblemStatement(uvaId: number): Promise<ProblemStatement> {
+    return this.requestJson("/api/problem-statement", {
+      method: "POST",
+      body: JSON.stringify({ uvaId }),
+    });
+  }
+
+  async checkDraft(steps: DraftStep[], ai: boolean): Promise<DraftIssue[]> {
+    const body = await this.requestJson<{ issues: DraftIssue[] }>("/api/drafts/check", {
+      method: "POST",
+      body: JSON.stringify({ steps, ai }),
+    });
+    return body.issues;
+  }
+
   createRenderJob(input: CreateRenderJobInput): Promise<RenderJob> {
     return this.requestJson("/api/render-jobs", {
       method: "POST",
@@ -206,14 +234,35 @@ async function assertOk(response: Response, fallback: string): Promise<void> {
   let message = `${fallback} (${response.status})`;
   try {
     const body = (await response.json()) as {
-      detail?: string;
+      detail?: string | ValidationError[];
       error?: string;
     };
-    message = body.detail ?? body.error ?? message;
+    message = Array.isArray(body.detail)
+      ? formatValidationErrors(body.detail)
+      : body.detail ?? body.error ?? message;
   } catch {
     // Keep fallback for non-JSON responses.
   }
   throw new Error(message);
+}
+
+type ValidationError = { loc?: (string | number)[]; msg?: string };
+
+/** FastAPI 422 `detail` → 「資料格式錯誤：第 1 步 focusLine：Input should be ...」 */
+export function formatValidationErrors(errors: ValidationError[]): string {
+  const lines = errors.map(({ loc = [], msg = "格式不正確" }) => {
+    const parts: string[] = [];
+    loc.forEach((part, i) => {
+      if (i === 0 && part === "body") return;
+      if (typeof part === "number" && loc[i - 1] === "steps") {
+        parts[parts.length - 1] = `第 ${part + 1} 步`;
+      } else {
+        parts.push(String(part));
+      }
+    });
+    return parts.length > 0 ? `${parts.join(" ")}：${msg}` : msg;
+  });
+  return `資料格式錯誤：${lines.join("；")}`;
 }
 
 export const apiClient = new ApiClient();

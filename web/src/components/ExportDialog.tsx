@@ -1,6 +1,7 @@
 import { Film } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { RenderJob } from "@/lib/api-client";
+import { IssueList } from "@/components/DraftIssues";
+import { apiClient, type DraftIssue, type RenderJob } from "@/lib/api-client";
 import type { Job } from "@/lib/draft-types";
 import { normalizeFolderName } from "@/lib/export-files";
 import { renderMp4, triggerMp4Download } from "@/lib/render-mp4";
@@ -28,6 +29,33 @@ export function ExportDialog({ job, open, onClose }: Props) {
   const [status, setStatus] = useState<RenderJob["status"] | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  // Rule-only check on open; null = still checking. A failed check doesn't block
+  // export, but it must not look like a clean draft either.
+  const [ruleErrors, setRuleErrors] = useState<DraftIssue[] | null>(null);
+  const [checkError, setCheckError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setRuleErrors(null);
+    setCheckError(null);
+    apiClient
+      .checkDraft(job.steps, false)
+      .then(
+        (issues) => {
+          if (!cancelled) setRuleErrors(issues.filter((i) => i.level === "error"));
+        },
+        (e: unknown) => {
+          if (cancelled) return;
+          setCheckError(e instanceof Error ? e.message : String(e));
+          setRuleErrors([]);
+        },
+      );
+    return () => {
+      cancelled = true;
+    };
+    // Only on open: re-checking on every keystroke behind the modal is pointless.
+  }, [open]);
 
   // A render takes minutes; without a ticking clock the dialog looks frozen.
   useEffect(() => {
@@ -108,6 +136,21 @@ export function ExportDialog({ job, open, onClose }: Props) {
           </div>
         )}
 
+        {ruleErrors && ruleErrors.length > 0 && (
+          <div className="rounded-lg border border-danger/30 bg-danger-soft p-2 mb-4">
+            <p className="text-xs font-semibold text-danger px-2 pt-1 pb-1.5">
+              草稿有 {ruleErrors.length} 個錯誤，影片可能不正確：
+            </p>
+            <div className="max-h-40 overflow-y-auto">
+              <IssueList issues={ruleErrors} />
+            </div>
+          </div>
+        )}
+
+        {checkError && (
+          <div className="error-banner mb-4">草稿檢查失敗，無法確認內容是否正確：{checkError}</div>
+        )}
+
         {error && <div className="error-banner mb-4">{error}</div>}
 
         <div className="flex justify-end gap-2">
@@ -117,10 +160,16 @@ export function ExportDialog({ job, open, onClose }: Props) {
           <button
             type="button"
             onClick={handleExport}
-            disabled={busy || job.steps.length === 0}
+            disabled={busy || ruleErrors === null || job.steps.length === 0}
             className="btn btn-primary px-3 py-2 text-sm"
           >
-            {busy ? "Render 中…" : "匯出 MP4"}
+            {busy
+              ? "Render 中…"
+              : ruleErrors === null
+                ? "檢查中…"
+                : ruleErrors.length > 0 || checkError
+                  ? "仍要匯出"
+                  : "匯出 MP4"}
           </button>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { ArrowLeft, WandSparkles } from "lucide-react";
+import { ArrowLeft, FileDown, WandSparkles } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { apiClient } from "@/lib/api-client";
@@ -8,8 +8,31 @@ export function GenerateJob() {
   const [name, setName] = useState("");
   const [problemStatement, setProblemStatement] = useState("");
   const [solutionCode, setSolutionCode] = useState("");
+  const [withAnimation, setWithAnimation] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [uvaId, setUvaId] = useState("");
+  const [fetching, setFetching] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const handleFetchProblem = async () => {
+    setFetchError(null);
+    const id = Number(uvaId);
+    if (!Number.isInteger(id) || id < 100 || id > 99999) {
+      setFetchError("請輸入 100–99999 的 UVa 題號。");
+      return;
+    }
+    setFetching(true);
+    try {
+      const result = await apiClient.fetchProblemStatement(id);
+      setProblemStatement(result.problemStatement);
+      setName((current) => (current.trim() ? current : `UVa ${id}`));
+    } catch (e: unknown) {
+      setFetchError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setFetching(false);
+    }
+  };
 
   const handleGenerate = async () => {
     setError(null);
@@ -28,6 +51,7 @@ export function GenerateJob() {
         name,
         problemStatement,
         solutionCode,
+        withAnimation,
       });
       navigate(`/jobs/${job.id}/edit`);
     } catch (e: unknown) {
@@ -67,6 +91,32 @@ export function GenerateJob() {
             />
           </Field>
 
+          <div>
+            <label htmlFor="uva-id" className="field-label">UVa 題號（可選，自動抓題目並整理成繁中）</label>
+            <div className="flex gap-2">
+              <input
+                id="uva-id"
+                type="number"
+                min={100}
+                max={99999}
+                value={uvaId}
+                onChange={(e) => setUvaId(e.target.value)}
+                className="input min-w-0"
+                placeholder="e.g. 10038"
+              />
+              <button
+                type="button"
+                onClick={handleFetchProblem}
+                disabled={fetching || busy}
+                className="btn btn-ghost shrink-0"
+              >
+                <FileDown size={16} />
+                {fetching ? "抓取中…" : "抓題目"}
+              </button>
+            </div>
+            {fetchError && <div className="error-banner mt-2">{fetchError}</div>}
+          </div>
+
           <Field label="題目內容">
             <textarea
               value={problemStatement}
@@ -87,6 +137,15 @@ export function GenerateJob() {
               spellCheck={false}
             />
           </Field>
+
+          <label className="flex items-center gap-2 text-sm text-mist cursor-pointer">
+            <input
+              type="checkbox"
+              checked={withAnimation}
+              onChange={(e) => setWithAnimation(e.target.checked)}
+            />
+            加入演算法動畫（實驗性）
+          </label>
 
           {error && <div className="error-banner">{error}</div>}
 

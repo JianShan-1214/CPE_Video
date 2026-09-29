@@ -46,6 +46,7 @@ export function importFromConfig(input: ImportInput): ImportResult {
       focusLine: s.focusLine,
       highlight: s.highlight,
       annotations: s.annotations,
+      animation: s.animation,
     });
   }
 

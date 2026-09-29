@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createVideoExportFiles } from "./export-files.ts";
+import { importFromConfig } from "./import-config.ts";
 import type { Job } from "./draft-types.ts";
 
 const job: Job = {
@@ -74,4 +75,25 @@ test("rejects duplicate file labels with different content", () => {
       ),
     /同一個 cpp 檔名有不同內容/,
   );
+});
+
+test("animation survives export and re-import", () => {
+  const animation = {
+    type: "array" as const,
+    frames: [{ values: [3, 1], pointers: { i: 0 }, caption: "開始" }],
+  };
+  const withAnim: Job = { ...job, steps: [{ ...job.steps[0], animation }, job.steps[1]] };
+  const files = createVideoExportFiles(withAnim, "x");
+  const config = JSON.parse(files.configJson);
+
+  assert.deepEqual(config.steps[0].animation, animation);
+  assert.equal("animation" in config.steps[1], false);
+
+  const imported = importFromConfig({
+    configJson: files.configJson,
+    cppFiles: Object.fromEntries(files.cppFiles),
+  });
+  assert.ok(imported.ok);
+  assert.deepEqual(imported.job.steps[0].animation, animation);
+  assert.equal(imported.job.steps[1].animation, undefined);
 });

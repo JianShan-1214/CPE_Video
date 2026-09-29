@@ -37,6 +37,7 @@ export function RemotionPreview({ job }: { job: Job }) {
         focusLine: s.focusLine,
         highlight: s.highlight,
         annotations: s.annotations,
+        animation: s.animation,
       })),
       theme: job.theme,
       width: job.width,

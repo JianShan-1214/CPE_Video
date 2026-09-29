@@ -1,6 +1,7 @@
 import type {
   AnnotationJSON,
   HighlightConfigJSON,
+  StepAnimation,
 } from "@remotion-src/config-types";
 import type { Theme } from "@remotion-src/calculate-metadata/theme";
 
@@ -18,6 +19,7 @@ export type DraftStep = {
   focusLine?: number;
   highlight?: HighlightConfigJSON;
   annotations?: AnnotationJSON[];
+  animation?: StepAnimation;
 };
 
 export type Job = {
