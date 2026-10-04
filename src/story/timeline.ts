@@ -255,6 +255,19 @@ export const RECTS = {
     codeFs: 22,
     codeLh: 38,
   },
+  // split2（D-020 E2）：左程式面板 x24,y100,w820,h852（字級 22、行高 38 → 整行可見 22 行；窄行號欄見 SPLIT2）；
+  // 右窗 x856–1896、y150–950（stageFit 區 1020×800，見 FIT_REGIONS.split2）。固定模式（無 stageFit）舞台 0.85 倍：1200×0.85＝1020 寬。
+  split2: {
+    stageX: 866,
+    stageY: 150,
+    stageScale: 0.85,
+    codeX: 24,
+    codeY: 100,
+    codeW: 820,
+    codeH: 852,
+    codeFs: 22,
+    codeLh: 38,
+  },
   // fullcode（D-020 E1）：畫面由 Story.tsx 的專用雙欄元件（FULLCODE）繪製；這裡的數值只供 rect 補間用，
   // fullcode 時舞台與一般程式面板會被淡出（見 evalLayout 的 fullOp）。數值同 code。
   fullcode: {
@@ -292,6 +305,21 @@ export const FULLCODE = {
   title: "完整程式碼",
 };
 
+// ── split2 幾何（D-020 E2；與 /workspace/cpe-tools/autoanim/stagefit.py 的 SPLIT2 逐值相同，tests_d020 對拍）──
+// 程式面板 820 寬：欄內可用 = 820 − 2（邊框）− 5（左邊線）− 行號欄(寬 fs×gutterW + 右內距 fs×gutterPad = 26.4+11=37.4) = 775.6px ≥ 58 字元×13.2 = 765.6px（字級 22、每字 0.6em）。
+// 面板高 852 / 行高 38 → 整行可見 22 行（22.4）。cap 放右窗上緣（top 104、字級 30，離 stage 區頂 150 有餘）；字幕仍在全寬底，面板底 952 < 字幕框頂 983。
+export const SPLIT2 = {
+  panel: { x: 24, y: 100, w: 820, h: 852 },
+  win: { x: 856, y: 150, w: 1040, h: 800 },
+  fs: 22,
+  lh: 38,
+  gutterW: 1.2,
+  gutterPad: 0.5,
+  maxCols: 58,
+  visibleLines: 22,
+  cap: { left: 856, width: 1040, top: 104, fontSize: 30 },
+};
+
 /** 把 n 行程式分成左（前半）右（後半）兩欄；回傳每欄 [起, 迄)（0-based）與列數、面板高 */
 export const fullcodeColumns = (n: number) => {
   const rows = Math.max(1, Math.ceil(n / 2));
@@ -325,6 +353,8 @@ export const FIT_REGIONS: Partial<Record<LayoutName, FitRegion>> = {
   concept: { rx: 60, ry: 150, rw: 1800, rh: 680, min: 0.5, max: 1.8 },
   wide: { rx: 60, ry: 150, rw: 1800, rh: 710, min: 0.5, max: 1.8 },
   split: { rx: 1060, ry: 150, rw: 830, rh: 790, min: 0.5, max: 1.4 },
+  // D-020 E2：右窗 1020×800（≥ 950×700）；倍率 0.5–1.5（內容少放大、多縮小）
+  split2: { rx: 866, ry: 150, rw: 1020, rh: 800, min: 0.5, max: 1.5 },
 };
 export const OUT_ROW = /^o\d+$/; // 輸出列（o0、o1…）：框寬收縮到文字寬度，不再佔滿 1100
 const WIDE_CH = /[\u2e80-\u9fff\uff00-\uffef]/;
@@ -406,7 +436,9 @@ export const evalLayout = (cues: FlatCue[], T: number, fit?: Partial<Record<Layo
   const codeOp = lerp(dim(prev.focus, "code"), dim(cur.focus, "code"), q);
   // D-020 E1：fullcode 的專用雙欄面板不透明度（進出 fullcode 以 0.5s 交叉淡入淡出，舞台與一般程式面板同時淡出）；沒有 fullcode 的 story 恆為 0
   const fullOp = lerp(prev.layout === "fullcode" ? 1 : 0, cur.layout === "fullcode" ? 1 : 0, q);
-  return { rect, animOp, codeOp, fullOp, index: i };
+  // D-020 E2：split2 的窄行號欄（進出 split2 以 0.5s 補間）；沒有 split2 的 story 恆為 0
+  const narrowOp = lerp(prev.layout === "split2" ? 1 : 0, cur.layout === "split2" ? 1 : 0, q);
+  return { rect, animOp, codeOp, fullOp, narrowOp, index: i };
 };
 
 // ── 程式碼高亮與揭露 ─────────────────────────────────────────────────────────

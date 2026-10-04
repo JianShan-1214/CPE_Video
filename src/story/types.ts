@@ -32,7 +32,8 @@ export type Op = {
 };
 
 /** fullcode（D-020 E1）：整份程式雙欄一次秀出（不捲動、不截斷、不顯示動畫舞台與 cap）；給片尾「完整程式碼」用 */
-export type LayoutName = "concept" | "code" | "split" | "wide" | "fullcode";
+/** split2（D-020 E2）：左程式面板 820×852（字級 22、窄行號欄、單行 ≤58 字元不截）＋右窗 1020×800（stageFit 區）；cap 在右窗上緣 */
+export type LayoutName = "concept" | "code" | "split" | "wide" | "fullcode" | "split2";
 export type FocusName = "anim" | "code" | "both";
 
 export type Cue = {

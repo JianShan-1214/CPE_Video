@@ -10,6 +10,7 @@ import {
   evalLayout,
   fitRects,
   FULLCODE,
+  SPLIT2,
   fullcodeColumns,
   subtitleTop,
   autoWidth,
@@ -54,7 +55,7 @@ export const Story: React.FC<StoryProps> = ({ story, timeline, code, folder }) =
   const codeSt = evalCode(codeTl, T, L.index);
   const sub = currentSubtitle(cues, T);
   const rect = L.rect;
-  const isCode = cue.layout === "code" || cue.layout === "split";
+  const isCode = cue.layout === "code" || cue.layout === "split" || cue.layout === "split2";
   // D-020 E1：fullcode 時舞台與一般程式面板隨 fullOp 淡出；fullOp=0（所有舊版面）時下面的 opacity 與以前逐值相同
   const fullOp = L.fullOp;
   const animOpacity = fullOp > 0 ? L.animOp * (1 - fullOp) : L.animOp;
@@ -67,13 +68,19 @@ export const Story: React.FC<StoryProps> = ({ story, timeline, code, folder }) =
   const codeShow = story.revealAll ? 1 : clamp01((T - (cues.find((c) => c.lines.length)?.start ?? Infinity)) / 0.3);
   const codeOpacity = fullOp > 0 ? L.codeOp * codeShow * (1 - fullOp) : L.codeOp * codeShow;
   void firstLineT;
+  // D-020 E2：split2 的窄行號欄（narrowOp=0 的所有舊版面走原公式，逐值不變）
+  const narrowOp = L.narrowOp;
+  const gutW = narrowOp > 0 ? rect.codeFs * 2.6 + (rect.codeFs * SPLIT2.gutterW - rect.codeFs * 2.6) * narrowOp : rect.codeFs * 2.6;
+  const gutPad = narrowOp > 0 ? rect.codeFs * 0.9 + (rect.codeFs * SPLIT2.gutterPad - rect.codeFs * 0.9) * narrowOp : rect.codeFs * 0.9;
 
   // ── cap ──
   const capA = clamp01((T - capSince[L.index]) / 0.25);
   const capPos = isCode
-    ? cue.layout === "split"
-      ? { left: 1070, width: 816, top: 100, fontSize: 30 }
-      : { left: 1215, width: 660, top: 165, fontSize: 30 }
+    ? cue.layout === "split2"
+      ? SPLIT2.cap
+      : cue.layout === "split"
+        ? { left: 1070, width: 816, top: 100, fontSize: 30 }
+        : { left: 1215, width: 660, top: 165, fontSize: 30 }
     : { left: 90, width: 1740, top: 100, fontSize: 40 };
 
   const progress = cue.scene / Math.max(1, story.scenes.length - 1);
@@ -228,7 +235,7 @@ export const Story: React.FC<StoryProps> = ({ story, timeline, code, folder }) =
                   borderLeft: `5px solid rgba(227,170,40,${inten})`,
                 }}
               >
-                <span style={{ width: rect.codeFs * 2.6, textAlign: "right", paddingRight: rect.codeFs * 0.9, color: "#6e7681", flexShrink: 0 }}>{ln}</span>
+                <span style={{ width: gutW, textAlign: "right", paddingRight: gutPad, color: "#6e7681", flexShrink: 0 }}>{ln}</span>
                 <span>
                   {tk.map((t, k) => (
                     <span key={k} style={{ color: t.c }}>{t.t}</span>
