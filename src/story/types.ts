@@ -31,7 +31,8 @@ export type Op = {
   set: Record<string, Partial<ElProps>>;
 };
 
-export type LayoutName = "concept" | "code" | "split" | "wide";
+/** fullcode（D-020 E1）：整份程式雙欄一次秀出（不捲動、不截斷、不顯示動畫舞台與 cap）；給片尾「完整程式碼」用 */
+export type LayoutName = "concept" | "code" | "split" | "wide" | "fullcode";
 export type FocusName = "anim" | "code" | "both";
 
 export type Cue = {
@@ -65,6 +66,8 @@ export type Story = {
   revealAll?: boolean;
   /** "auto"＝舞台依內容自適應（CPE-003）：依各版面內實際出現過的元素外框決定 stageScale 與位置，輸出列依文字寬度收縮。省略＝沿用固定 RECTS（舊行為） */
   stageFit?: "auto";
+  /** 版面修訂（D-020 E4）：≥2 時字幕下移到 top=1003，與 wide 程式列（底 y=998）0px 重疊；省略（舊 story）＝字幕 top=985，與以前逐值相同 */
+  layoutRev?: number;
   code: string;
   scenes: Scene[];
 };

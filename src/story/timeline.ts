@@ -255,7 +255,58 @@ export const RECTS = {
     codeFs: 22,
     codeLh: 38,
   },
+  // fullcode（D-020 E1）：畫面由 Story.tsx 的專用雙欄元件（FULLCODE）繪製；這裡的數值只供 rect 補間用，
+  // fullcode 時舞台與一般程式面板會被淡出（見 evalLayout 的 fullOp）。數值同 code。
+  fullcode: {
+    stageX: 1215,
+    stageY: 215,
+    stageScale: 0.55,
+    codeX: 40,
+    codeY: 125,
+    codeW: 1150,
+    codeH: 835,
+    codeFs: 22,
+    codeLh: 38,
+  },
 } as Record<LayoutName, Rects>;
+
+// ── fullcode 雙欄幾何（D-020 E1；與 /workspace/cpe-tools/autoanim/stagefit.py 的 FULLCODE 逐值相同，tests_d020 對拍）──
+// 1080p：標題「完整程式碼」y=94–134；兩欄各 colW=900（左 x=50、右 x=970）；字級 24（JetBrains Mono 每字 0.6em＝14.4px，58 字元＝835.2px）；
+// 行高 33；面板 y=140 起，底不得超過 bottomMax=975（字幕框頂 983，留 8px）→ 每欄最多 floor((975−140−8)/33)=25 列 → 容量 maxLines=50 行
+// （47 行 → 左 24／右 23 列，面板底 940；40 行 → 20 列，底 808）。欄內可用寬 = colW − 2（邊框）− 5（左邊線）− gutter(46) = 847 ≥ 835.2。
+export const FULLCODE = {
+  fs: 24,
+  lh: 33,
+  x0: 50,
+  colW: 900,
+  gap: 20,
+  y0: 140,
+  titleTop: 94,
+  titleH: 40,
+  titleFs: 32,
+  gutter: 46,
+  pad: 4,
+  bottomMax: 975,
+  maxLines: 50,
+  maxCols: 58,
+  title: "完整程式碼",
+};
+
+/** 把 n 行程式分成左（前半）右（後半）兩欄；回傳每欄 [起, 迄)（0-based）與列數、面板高 */
+export const fullcodeColumns = (n: number) => {
+  const rows = Math.max(1, Math.ceil(n / 2));
+  return {
+    rows,
+    h: rows * FULLCODE.lh + 2 * FULLCODE.pad,
+    cols: [
+      [0, Math.min(n, rows)],
+      [Math.min(n, rows), n],
+    ] as [number, number][],
+  };
+};
+
+/** 字幕框的 top（D-020 E4）：layoutRev≥2 → 1003（框 y≈1001–1075，與 wide 程式列底 998 零重疊）；舊 story → 985（與以前逐值相同） */
+export const subtitleTop = (layoutRev?: number) => ((layoutRev ?? 0) >= 2 ? 1003 : 985);
 
 export const findCue = (cues: FlatCue[], T: number) => {
   let idx = 0;
@@ -353,7 +404,9 @@ export const evalLayout = (cues: FlatCue[], T: number, fit?: Partial<Record<Layo
   const dim = (focus: FocusName, which: FocusName) => (focus === which || focus === "both" ? 1 : 0.3);
   const animOp = lerp(dim(prev.focus, "anim"), dim(cur.focus, "anim"), q);
   const codeOp = lerp(dim(prev.focus, "code"), dim(cur.focus, "code"), q);
-  return { rect, animOp, codeOp, index: i };
+  // D-020 E1：fullcode 的專用雙欄面板不透明度（進出 fullcode 以 0.5s 交叉淡入淡出，舞台與一般程式面板同時淡出）；沒有 fullcode 的 story 恆為 0
+  const fullOp = lerp(prev.layout === "fullcode" ? 1 : 0, cur.layout === "fullcode" ? 1 : 0, q);
+  return { rect, animOp, codeOp, fullOp, index: i };
 };
 
 // ── 程式碼高亮與揭露 ─────────────────────────────────────────────────────────

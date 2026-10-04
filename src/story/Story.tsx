@@ -9,6 +9,9 @@ import {
   evalElement,
   evalLayout,
   fitRects,
+  FULLCODE,
+  fullcodeColumns,
+  subtitleTop,
   autoWidth,
   findCue,
   flatten,
@@ -52,6 +55,9 @@ export const Story: React.FC<StoryProps> = ({ story, timeline, code, folder }) =
   const sub = currentSubtitle(cues, T);
   const rect = L.rect;
   const isCode = cue.layout === "code" || cue.layout === "split";
+  // D-020 E1：fullcode 時舞台與一般程式面板隨 fullOp 淡出；fullOp=0（所有舊版面）時下面的 opacity 與以前逐值相同
+  const fullOp = L.fullOp;
+  const animOpacity = fullOp > 0 ? L.animOp * (1 - fullOp) : L.animOp;
 
   // ── 程式碼 ──
   const total = toks.length;
@@ -59,6 +65,7 @@ export const Story: React.FC<StoryProps> = ({ story, timeline, code, folder }) =
   const scroll = Math.min(maxScroll, Math.max(0, codeSt.center * rect.codeLh - rect.codeH / 2));
   const firstLineT = codeTl.revealAt.get(1) ?? Infinity;
   const codeShow = story.revealAll ? 1 : clamp01((T - (cues.find((c) => c.lines.length)?.start ?? Infinity)) / 0.3);
+  const codeOpacity = fullOp > 0 ? L.codeOp * codeShow * (1 - fullOp) : L.codeOp * codeShow;
   void firstLineT;
 
   // ── cap ──
@@ -84,7 +91,7 @@ export const Story: React.FC<StoryProps> = ({ story, timeline, code, folder }) =
       <div style={{ position: "absolute", left: 0, top: 84, height: 4, width: 1920 * (0.04 + 0.96 * progress), background: "#e3aa28" }} />
 
       {/* cap */}
-      {cue.cap ? (
+      {cue.cap && cue.layout !== "fullcode" ? (
         <div
           style={{
             position: "absolute",
@@ -111,7 +118,7 @@ export const Story: React.FC<StoryProps> = ({ story, timeline, code, folder }) =
           height: STAGE_H,
           transform: `scale(${rect.stageScale})`,
           transformOrigin: "0 0",
-          opacity: L.animOp,
+          opacity: animOpacity,
         }}
       >
         {[...kfs.entries()].map(([id, list]) => {
@@ -197,7 +204,7 @@ export const Story: React.FC<StoryProps> = ({ story, timeline, code, folder }) =
           borderRadius: 12,
           background: "#010409",
           border: "1px solid #30363d",
-          opacity: L.codeOp * codeShow,
+          opacity: codeOpacity,
         }}
       >
         <div style={{ transform: `translateY(${-scroll}px)` }}>
@@ -233,8 +240,80 @@ export const Story: React.FC<StoryProps> = ({ story, timeline, code, folder }) =
         </div>
       </div>
 
+      {/* fullcode（D-020 E1）：整份程式雙欄（左前半、右後半），不捲動、不截斷；只在 fullOp>0 時繪製 */}
+      {fullOp > 0 ? (
+        <>
+          <div
+            style={{
+              position: "absolute",
+              left: FULLCODE.x0,
+              top: FULLCODE.titleTop,
+              width: 2 * FULLCODE.colW + FULLCODE.gap,
+              height: FULLCODE.titleH,
+              lineHeight: `${FULLCODE.titleH}px`,
+              fontSize: FULLCODE.titleFs,
+              fontWeight: 700,
+              color: "#ffe282",
+              opacity: fullOp,
+            }}
+          >
+            {FULLCODE.title}
+          </div>
+          {fullcodeColumns(total).cols.map(([a, b], ci) => (
+            <div
+              key={ci}
+              style={{
+                position: "absolute",
+                left: FULLCODE.x0 + ci * (FULLCODE.colW + FULLCODE.gap),
+                top: FULLCODE.y0,
+                width: FULLCODE.colW,
+                height: fullcodeColumns(total).h,
+                boxSizing: "border-box",
+                overflow: "hidden",
+                borderRadius: 12,
+                background: "#010409",
+                border: "1px solid #30363d",
+                padding: `${FULLCODE.pad}px 0`,
+                opacity: fullOp,
+              }}
+            >
+              {toks.slice(a, b).map((tk, k) => {
+                const ln = a + k + 1;
+                const inten = codeSt.intensity(ln);
+                // 預設全亮；旁白講到某段時（cue.lines）該段高亮，其餘只輕微變暗（≥0.82）
+                const op = 1 - 0.18 * codeSt.dimFactor * (1 - inten);
+                return (
+                  <div
+                    key={ln}
+                    style={{
+                      height: FULLCODE.lh,
+                      lineHeight: `${FULLCODE.lh}px`,
+                      fontFamily,
+                      fontSize: FULLCODE.fs,
+                      whiteSpace: "pre",
+                      tabSize: 4,
+                      display: "flex",
+                      opacity: op,
+                      background: `rgba(227,170,40,${0.2 * inten})`,
+                      borderLeft: `5px solid rgba(227,170,40,${inten})`,
+                    }}
+                  >
+                    <span style={{ width: FULLCODE.gutter, boxSizing: "border-box", textAlign: "right", paddingRight: 12, color: "#6e7681", flexShrink: 0 }}>{ln}</span>
+                    <span>
+                      {tk.map((t, j) => (
+                        <span key={j} style={{ color: t.c }}>{t.t}</span>
+                      ))}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </>
+      ) : null}
+
       {/* subtitle：固定位置、單行 */}
-      <div style={{ position: "absolute", left: 0, right: 0, top: 985, height: 70, display: "flex", justifyContent: "center", alignItems: "center" }}>
+      <div style={{ position: "absolute", left: 0, right: 0, top: subtitleTop(story.layoutRev), height: 70, display: "flex", justifyContent: "center", alignItems: "center" }}>
         {sub ? (
           <div
             style={{
