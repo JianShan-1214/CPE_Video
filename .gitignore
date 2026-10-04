@@ -24,3 +24,4 @@ key.json
 # public/ 只保留 example 資料夾，其他個人專案不上傳
 public/*
 !public/example-bubble_sort
+*.bak_*
