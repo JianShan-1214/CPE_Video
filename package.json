@@ -43,6 +43,9 @@
     "gen-audio": "node scripts/gen-audio.mjs",
     "lint": "tsc && eslint src",
     "web:dev": "npm run dev -w web",
-    "web:build": "npm run build -w web"
+    "web:build": "npm run build -w web",
+    "story-build": "node scripts/story-build.mjs",
+    "story-audio": "node scripts/story-audio.mjs",
+    "story-render": "node scripts/story-render.mjs"
   }
 }
