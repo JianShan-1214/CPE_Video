@@ -171,7 +171,7 @@ void put(std::string& o, const std::deque<T, A>& v, bool& tr) {
 
 template <class T, class C>
 void put(std::string& o, const std::stack<T, C>& s, bool& tr) {
-    std::stack<T, C> c = s;  // bottom -> top
+    std::stack<T, C> c = s;  // 底 -> 頂
     std::vector<T> items;
     while (!c.empty()) {
         items.push_back(c.top());

@@ -14,7 +14,7 @@ D-020：另附兩段（不改既有表格）——(E4) 字幕框與各版面程�
 A1 門檻（1920×1080 成片像素）：一般文字≥26；槽位卡高≥90（槽位≤8）；節點直徑≥64、節點字≥28（節點≤10）；佇列/堆疊格高≥64（假設≤8 格）。
 內容超過上限時容許縮到 75% 但要出警示；低於 75% 或沒超限卻低於門檻＝未達標。
 D-012：(F7) 元件退化（資料夾 warnings.json 內 status=degraded 的 slots／graph_*／tree_array／queue／stack／priority_queue）時，對應 A1 項目顯示 n/a(退化)，
-整體判定 n/a（元件退化），不計達標；(F5) 新增「文字溢出」欄（文字估寬 > 框內寬）；裁定（EL）：副標字級（23–25px）不計入 A1 文字判定；
+整體判定 n/a（元件退化），不計達標；(F5) 新增「文字溢出」欄（文字估寬 > 框內寬）；規則：副標字級（23–25px）不計入 A1 文字判定；
 split 程式段不要求達 A1；concept 下舊模式 --no-comps 縮小屬排除項。
 元素群組以 id 前綴辨識：pc_/sl_＝槽位卡/槽、gn_/tn_＝圖/樹節點、qc_＝佇列/堆疊格。副標字級另列（不計入判定）。
 """
@@ -52,7 +52,7 @@ def analyse(folder, model, as_layout=None):
     deg = sf.load_degraded(folder)        # D-012（F7）：warnings.json 內 status=degraded 的元件型態 → 對應 A1 項目判 n/a（退化）
     res = sf.judge(m, degraded=deg)
     ov, bad = sf.overall(res)
-    rl = sf.ruling(story, model, lm, degraded=deg)[0]   # CPE BOT 裁定：wide／concept 判 A1；split 只受 75% 下限
+    rl = sf.ruling(story, model, lm, degraded=deg)[0]   # 規則：wide／concept 判 A1；split 只受 75% 下限
     ovf = sf.text_overflow(story)         # D-012（F5）：文字估寬 > 框內寬
     return dict(ruling=rl, overflow=len(ovf), overflow_items=sorted(ovf)[:6], degraded=sorted(deg), name=Path(folder).name, model=model + (f"@{as_layout}" if as_layout else ""), scales=m["scales"], count=m["count"],
                 min={k: (None if v is None else round(v, 2)) for k, v in m["min"].items()}, verdict=ov, failed=bad,
@@ -61,7 +61,7 @@ def analyse(folder, model, as_layout=None):
 
 
 # D-020 E4：各版面程式面板底（RECTS：concept 842+126、wide 872+126、split／code 125+835）與字幕框頂（舊 story 983；layoutRev≥2 為 1001）
-CODE_BOTTOM = {"concept": 842 + 126, "wide": 872 + 126, "split": 125 + 835, "code": 125 + 835, "split2": 100 + 852}
+CODE_PANEL_END = {"concept": 842 + 126, "wide": 872 + 126, "split": 125 + 835, "code": 125 + 835, "split2": 100 + 852}
 
 
 def subtitle_overlap(folder):
@@ -69,7 +69,7 @@ def subtitle_overlap(folder):
     rev = story.get("layoutRev") or 0
     top = sf.SUBTITLE_TOP_REV2 if rev >= 2 else sf.SUBTITLE_TOP_BOX
     used = sorted({(c.get("layout") or sc["layout"]) for sc in story["scenes"] for c in sc["cues"]})
-    lay = {L: max(0, CODE_BOTTOM[L] - top) for L in used if L in CODE_BOTTOM}
+    lay = {L: max(0, CODE_PANEL_END[L] - top) for L in used if L in CODE_PANEL_END}
     if "split2" in used: lay["split2"] = max(0, sf.SPLIT2["panel"]["y"] + sf.SPLIT2["panel"]["h"] - top)
     if "fullcode" in used:
         code = (Path(folder) / "code.cpp").read_text(encoding="utf-8") if (Path(folder) / "code.cpp").exists() else ""

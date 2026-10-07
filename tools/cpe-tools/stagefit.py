@@ -4,10 +4,10 @@
 - metrics(story, model)：重放 story.json 的 ops，依各 cue 版面的舞台倍率，推算 1920×1080 成片中各元素的最小像素（A1 各項）。
 - fit_warnings(story, rows)：超過上限／未達標時的警示，格式同 coverage.py／detect.py 的 warnings.json 條目（type,name,status,evidence,variables,why,now,missing,eta,message）。
 - merge_warnings(folder, ws)：把 stage_fit 警示併入資料夾的 warnings.json（先移除舊的 stage_fit，可重複執行）。
-D-012 裁定（EL／CPE BOT；只寫文件、不改程式）：
+D-012 規則（只寫文件、不改程式）：
 - F6：副標（sub，成片約 23–25px）不計入 A1「一般文字 ≥26」判定（metrics 另列 text_sub，不進 judge）。
 - F8：--layout concept 下 --no-comps（舊模式）的 nocomps 縮放 1.45→1.18 屬舊模式排除項，接受。
-- F10：預設 --layout split 未達 A1 時有 type=stage_fit 警示；split 不要求達 A1（CPE BOT 裁定，判定走 relaxed 規則）。
+- F10：預設 --layout split 未達 A1 時有 type=stage_fit 警示；split 不要求達 A1（判定走 relaxed 規則）。
 - D-012 新增：type=text_overflow（F5，估算）、元件退化 → A1 項目 n/a（F7）、summary_of／geo_warnings（F3／F4 的 warnings.json 接線）。
 model：legacy＝固定 RECTS（舊行為）；fit＝story.stageFit=="auto" 的自適應。
 """
@@ -198,7 +198,7 @@ def load_degraded(folder):
     except (ValueError, OSError): return set()
 
 
-# D-020 E3 退路版（CPE BOT／EL 裁定；完整版 90px 不做）：split2 有槽位（slot）時，槽卡高與一般文字改分級——
+# D-020 E3 退路版（完整版 90px 不做）：split2 有槽位（slot）時，槽卡高與一般文字改分級——
 #   槽卡高：≥90 全額；68–89 警示通過（pass_floor，需警示）；<68 不達標。 一般文字：≥26 全額；20–25 警示通過；<20 不達標。
 # 只限 split2 且該版面有槽位卡；其他版面、其他元件（節點／佇列格）與 split2 無槽位的 story 照舊全額判定。
 RETREAT = {"split2": dict(slot_h=68, text=20)}
@@ -212,7 +212,7 @@ def retreat_floors(L, m):
 
 def judge(m, relaxed=False, degraded=(), floors=None):
     """A1 逐項判定：status ∈ na／na_degraded（元件退化，無此元素，不算達標）／pass／pass_floor（超過上限但≥75%，需警示）／fail
-    relaxed=True（CPE BOT 裁定：split 程式段不要求達 A1）：≥門檻＝pass；≥75% 門檻＝pass_floor（警示）；其餘 fail，與數量上限無關"""
+    relaxed=True（split 程式段不要求達 A1）：≥門檻＝pass；≥75% 門檻＝pass_floor（警示）；其餘 fail，與數量上限無關"""
     res = {}
     degraded = set(degraded)
     if WEAK in degraded and all(m["min"][k] is None for k in DEGRADE_DEFAULT): degraded |= set(DEGRADE_DEFAULT)   # D-016（F7）：畫面沒有任何元件＋有未認領型態警示
@@ -245,7 +245,7 @@ def overall(res):
 
 
 # ── 警示（warnings.json 條目）──
-STRICT_LAYOUTS = ("wide", "concept", "split2")   # D-020（EL 裁定）：split2 判全額 A1（不是 split 的 75% 寬鬆規則）； CPE BOT 裁定：動畫密集段（wide／concept）判 A1；split（程式段）只受 75% 下限與警示
+STRICT_LAYOUTS = ("wide", "concept", "split2")   # D-020：split2 判全額 A1（不是 split 的 75% 寬鬆規則）；動畫密集段（wide／concept）判 A1；split（程式段）只受 75% 下限與警示
 
 
 def ruling(story, model="fit", layout_map=None, degraded=()):
@@ -426,14 +426,14 @@ def fullcode_metrics(code, tab=4):
     col = fullcode_columns(max(n, 1))
     avail = F["colW"] - 2 - 5 - F["gutter"]                 # 欄寬 − 邊框(1×2) − 左邊線(5) − 行號欄
     need = longest * 0.6 * F["fs"]                          # JetBrains Mono 每字 0.6em（D-020 實測 16.1px@27px）
-    bottom = F["y0"] + col["h"]
+    low_y = F["y0"] + col["h"]
     reasons = []
     if n > F["maxLines"]: reasons.append(f"行數 {n} > 容量 {F['maxLines']}（每欄 {(F['bottomMax'] - F['y0'] - 2 * F['pad']) // F['lh']} 列）")
     if longest > F["maxCols"]: reasons.append(f"最長行 {longest} 字元 > {F['maxCols']}")
     if need > avail + 1e-9: reasons.append(f"最長行需寬 {need:.0f}px > 欄內可用 {avail}px")
     if F["fs"] < 22: reasons.append(f"字級 {F['fs']} < 22")
-    if bottom > F["bottomMax"] or bottom >= SUBTITLE_TOP_BOX: reasons.append(f"面板底 {bottom} 超過 {F['bottomMax']}／壓到字幕框（{SUBTITLE_TOP_BOX}）")
-    return dict(lines=n, longest=longest, rows=col["rows"], fs=F["fs"], panel_bottom=bottom, need_px=round(need, 1), avail_px=avail,
+    if low_y > F["bottomMax"] or low_y >= SUBTITLE_TOP_BOX: reasons.append(f"面板底 {low_y} 超過 {F['bottomMax']}／壓到字幕框（{SUBTITLE_TOP_BOX}）")
+    return dict(lines=n, longest=longest, rows=col["rows"], fs=F["fs"], panel_bottom=low_y, need_px=round(need, 1), avail_px=avail,
                 ok=not reasons, reasons=reasons)
 
 
@@ -453,13 +453,13 @@ def split2_metrics(code, tab=4):
     need = longest * 0.6 * S["fs"]                          # JetBrains Mono 每字 0.6em
     vis = S["panel"]["h"] // S["lh"]
     rx, ry, rw, rh, mn, mx = FIT_REGIONS["split2"]
-    bottom = S["panel"]["y"] + S["panel"]["h"]
+    low_y = S["panel"]["y"] + S["panel"]["h"]
     reasons = []
     if longest > S["maxCols"]: reasons.append(f"最長行 {longest} 字元 > {S['maxCols']}")
     if need > avail + 1e-9: reasons.append(f"最長行需寬 {need:.1f}px > 面板內可用 {avail:.1f}px")
     if S["fs"] < 20: reasons.append(f"字級 {S['fs']} < 20")
     if vis < 20: reasons.append(f"整行可見行數 {vis} < 20")
     if rw < 950 or rh < 700: reasons.append(f"右窗 {rw}×{rh} < 950×700")
-    if bottom >= SUBTITLE_TOP_BOX: reasons.append(f"面板底 {bottom} 壓到字幕框（{SUBTITLE_TOP_BOX}）")
-    return dict(lines=len(lines), longest=longest, fs=S["fs"], lh=S["lh"], visible_lines=vis, panel_w=S["panel"]["w"], panel_h=S["panel"]["h"], panel_bottom=bottom,
+    if low_y >= SUBTITLE_TOP_BOX: reasons.append(f"面板底 {low_y} 壓到字幕框（{SUBTITLE_TOP_BOX}）")
+    return dict(lines=len(lines), longest=longest, fs=S["fs"], lh=S["lh"], visible_lines=vis, panel_w=S["panel"]["w"], panel_h=S["panel"]["h"], panel_bottom=low_y,
                 need_px=round(need, 1), avail_px=round(avail, 1), win_w=rw, win_h=rh, ok=not reasons, reasons=reasons)

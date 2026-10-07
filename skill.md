@@ -1,132 +1,157 @@
 ---
 name: cpe-video
 description: >-
-  CPE Video 教學影片唯一 skill：(A) 用 tools/cpe-tools（autoanim／narrate／檢查器）＋ Remotion Story
-  模式把 CPE／OJ 的 C++ 解法做成教學影片（現行標準）；(B) 手動 config 流程——環境檢查、素材收集、
-  AI 切片、逐步確認、產生音檔（呼叫 /cpe-video 或「從零建新影片」）。
+  把一題 C++ 解法（CPE／OJ 題）做成教學影片：用 tools/cpe-tools 自動追蹤程式（autoanim）→ 寫口語旁白並驗證（narrate）
+  → Remotion 渲染（Story 模式，可加 TTS）。也涵蓋出片前檢查（overlapcheck 等）、元件覆蓋表，以及舊式手動 config 流程。
 metadata:
   tags: cpe, video, remotion, tts, cpp, tutorial, autoanim
 ---
+# CPE Video：C++ 解法 → 教學影片
 
-# CPE 教學影片工具流程（cpe-tools ＋ CPE_Video）
+本檔所有路徑都相對於 repo 根目錄。指令中 `<folder>` 是 `public/` 底下的資料夾名稱。
 
 ## 何時使用
-- 收到題目材料（folder 名、題目說明、完整 C++、小輸入／預期輸出），要產出講解影片。
-- 要重跑 autoanim／narrate、做出片前檢查、或判斷是否要找工程補元件。
+- 手上有一題的完整 C++ 解法＋一組小輸入（與預期輸出），想產出逐步講解影片。
+- 要重跑追蹤／旁白、做出片前檢查、或判斷某種資料結構目前能不能自動呈現。
+- 要用舊式 `config.json`＋累加 cpp 的手動流程（見附錄 B）。
 
-## 不是這個 skill
-- 修 tools/cpe-tools 程式本身（缺元件、tracer bug）→ 交工程負責人／實作工程師。
-- Notion 任務卡 → 專案管理。
-- commit／PR／push／merge → 需審片者明確同意後交工程負責人。
-- 題目解法撰寫、測資設計：不在本 skill 範圍；skill 與遠端倉不放解法全文。
+## 不在本 skill 範圍
+- 修改 `tools/cpe-tools` 或 `src/` 的程式本身（新增元件、tracer 支援新型別）——見「新增元件步驟」與「疑難排解」。
+- 題目解法撰寫與測資設計。
 
-## 角色（通用名）
-- **審片者**：給題＋答案 cpp；審無語音版與正式語音版；核可 TTS、commit／push／merge。
-- **總管／調度**：唯一入口；讀 skill、派工、轉結果給審片者、守關卡；不跑 autoanim、不 render。
-- **出片負責人**：立項（需求＋驗收）→ 跑 autoanim／narrate／render／TTS → 內檢 → 交付路徑。
-- **工程負責人**：只拆工程、派實作工程師、追進度；不寫碼、不渲染。
-- **實作工程師**：只修 bug／缺元件；不跑出片工具。
+## 前置需求
+| 項目 | 版本／說明 | 誰需要 |
+|---|---|---|
+| OS | Linux 或 macOS（沙箱 runner 使用 POSIX `resource` 模組；Windows 請用 WSL） | autoanim |
+| Python | 3.12 以上（與 `backend/pyproject.toml` 的 `requires-python` 一致） | 全部 Python 工具 |
+| Python 套件 | `tree-sitter`、`tree-sitter-cpp`（解析 C++）、`anyio`（`backend/app/services/trace/runner.py` 使用）；其餘工具只用標準函式庫 | autoanim |
+| C++ 編譯器 | `g++`（或 `c++`／`clang++`；可用環境變數 `CPE_CXX` 指定）——tracer 會實際編譯並執行你的程式 | autoanim |
+| Node.js／npm | Node 18 以上（`scripts/*.mjs` 為 ESM 並使用內建 `fetch`）；`npm install` 安裝 Remotion 等依賴 | story-build／render／TTS |
+| ffprobe（ffmpeg） | 有音檔時 `story-build` 用來量每句長度；抽影格檢查也會用到 ffmpeg | 正式語音版、檢查 |
+| `OPENAI_API_KEY` | 只透過環境變數提供（例如 `export OPENAI_API_KEY=...`）；不要寫進任何會進 git 的檔案 | `story-audio`（TTS） |
 
-### 本團隊對照
-| 通用名 | 本團隊 |
+`autoanim.py` 會自行把 `backend/` 加進 `sys.path`，所以不需要安裝整個 backend，只要上表的三個 Python 套件。`narrate.py`、檢查器、`coverage.py`、`sync_skill.py` 任何 Python 3.12+ 都能直接跑。
+
+## 安裝
+```bash
+# 1. Node 依賴（Remotion）
+npm install
+
+# 2. Python 環境（位置自訂，以下用 repo 內被 .gitignore 忽略的 .venv 為例）
+python3 -m venv .venv
+. .venv/bin/activate
+pip install tree-sitter tree-sitter-cpp anyio
+
+# 3. 確認
+g++ --version
+python tools/cpe-tools/autoanim.py --help
+```
+
+## 端到端流程
+1. 準備輸入：完整解法 `X.cpp`、小輸入 `X.in`、預期輸出 `X.out`。輸入越小越好（見「顯示上限」）；教學片用 `split2` 版面時，程式單行請 ≤58 字元。這些檔案放在 repo 外或不要 commit。
+2. autoanim：追蹤 → 基礎 story（含模板旁白）。
+3. 看 autoanim 結尾的缺元件警示與 `warnings.json`，決定照退化畫面出片或先補元件。
+4. narrate：`dump` → 寫 `narration.json` → `apply`（要 exit 0、沒有 warning）。
+5. 無語音版 render → 跑「出片前檢查」→ 人工看片。
+6. （選用）TTS：`story-audio` → 再 render 正式語音版 → 再檢查一次音畫對齊。
+
+建議的影片結構：題目說明 → 解法概念 → 程式逐段講解（split2）→ 片尾完整程式（fullcode 場景）。
+
+### 1) autoanim：追蹤並產生基礎 story
+```bash
+cd tools/cpe-tools
+python autoanim.py <base_folder> --cpp X.cpp --stdin X.in --expect X.out --layout split2 --title "<標題>"
+```
+- 流程：tree-sitter 插樁 → 沙箱分別編譯執行原版與插樁版（輸出必須一致；有 `--expect` 時還必須吻合）→ 事件流 → 基礎 story → 自我對拍。
+- 輸出：`public/<base_folder>/` 下的 `story.json`、`code.cpp`、`verify.json`、`trace_events.json`、`narr_meta.json`、`warnings.json`。同名資料夾已存在時會直接覆寫這些檔案；建議命名 `auto_<題>_base`。
+- 參數（皆來自 `autoanim.py --help`）：
+  | 參數 | 說明 |
+  |---|---|
+  | `folder`（位置參數） | 輸出資料夾名稱 |
+  | `--cpp`（必填） | C++ 原始碼 |
+  | `--stdin`（必填） | 輸入檔 |
+  | `--expect` | 預期輸出；不符就中止 |
+  | `--title` | 影片標題 |
+  | `--layout split\|split2\|concept\|wide` | 預設 `split`；教學片建議 `split2`（左程式面板＋右動畫窗）。`fullcode` 不是這裡的 layout，而是 narrate 的片尾場景 |
+  | `--no-comps` / `--disable graph,seq,slots,tree,keyed` | 全部或個別關閉動畫元件 |
+  | `--out` | 輸出根目錄，預設 `public/` |
+  | `--stage-fit auto\|off` | 動畫區依內容自適應放大，並寫入最小可讀尺寸警示（預設 auto） |
+  | `--stage-w N` | 虛擬舞台寬；預設 split2 為 1000，其餘 1200 |
+  | `--show-born` | 只設一次就不再改的純量也顯示 |
+  | `--layout-rev 1\|2` | 預設 2（字幕下移，與程式列不重疊） |
+- 顯示上限：1D 陣列 ≤16、2D ≤8×10、純量 ≤8；超過只顯示前段並出警示。
+- 陣列只顯示程式寫入過的格子；未初始化的殘值格顯示「?」。
+- 當索引用的純量顯示成 ▲指標：黃＝本 cue 改變，綠＝本場先前已定案；離開作用域或尚未初始化時收起。
+
+### 2) narrate：口語旁白層
+```bash
+cd tools/cpe-tools
+python3 narrate.py dump <base_folder>                                   # 印出給寫旁白者（人或 AI）看的精簡稿
+python3 narrate.py apply <base_folder> <path/to/narration.json> <new_folder> [--no-build] [--stage-fit auto|off]
+```
+- `apply` 不改任何動畫 op（畫面＝trace），只合併文字並驗證（見「驗證涵蓋範圍」）；成功後在 repo 根目錄自動跑 `node scripts/story-build.mjs <new_folder> --no-audio`（`--no-build` 可略過）。
+- 驗證失敗會列出 ✗ 並 exit 1（story 仍會寫出）：修 `narration.json` 後重跑。
+- 有元件時 cue 數會變，務必重跑 `dump` 再寫 narration。
+- 環境變數 `NARRATE_PUB` 可改讀寫其他 public 目錄（測試用；此時自動 story-build 仍以 repo 的 `public/` 為準）。
+
+### 3) Remotion：build／render／TTS（在 repo 根目錄）
+```bash
+npm run story-build <folder> -- --no-audio          # 產生 public/<folder>/timeline.json 並做規則檢查
+npm run story-render <folder> -- --no-audio         # 無語音版，預設輸出 out/<folder>_noaudio.mp4
+npm run story-render <folder> -- --no-audio my.mp4  # 也可指定輸出檔（副檔名 .mp4）
+npm run dev                                          # Remotion Studio 預覽
+
+# 選用：TTS（OpenAI）
+export OPENAI_API_KEY=...
+npm run story-audio <folder>             # 逐句產生 public/<folder>/audio/<cueId>.mp3；已存在的會跳過
+npm run story-audio <folder> -- --force  # 全部重產（例如換了聲音）
+npm run story-render <folder>            # 有音檔時自動用真實長度並混音，預設輸出 out/<folder>.mp4
+```
+- 也可直接 `node scripts/story-render.mjs <folder> --no-audio [out.mp4]`。
+- `story-render` 會先自動跑 `story-build`。render 需要數分鐘，一次跑一支即可。
+- TTS 設定（環境變數）：`OPENAI_TTS_VOICE`（聲音，可自選）、`OPENAI_TTS_MODEL`（預設 `gpt-4o-mini-tts`）、`OPENAI_BASE_URL`、`TTS_INSTRUCTIONS`（語氣指示）。換聲音後要加 `--force` 重產。
+
+## 出片前檢查（每支片都跑）
+```bash
+cd tools/cpe-tools
+python3 overlapcheck.py <folder>          # 重放每個 cue 結束時的可見元素，找重疊／出界；目標 0
+python3 overlapcheck_strict.py <folder>   # 同上但 plain 標籤也算；目標 0
+python3 dumpcues.py <folder> <id前綴…>     # 印出每個 cue 結束時指定前綴元素的狀態（抽查用）
+python3 pixel_table.py <folder>           # 不渲染推算 1920×1080 成片的最小元素像素表（--strict-exit 未達標時 exit 1）
+cat ../../public/<folder>/verify.json      # autoanim 對拍結果（ok 應等於 checked）
+cat ../../public/<folder>/narr_verify.json # narrate 驗證結果
+cat ../../public/<folder>/warnings.json    # 缺元件／舞台尺寸警示
+cd ../.. && npx tsc --noEmit               # 有改到 src/ 時
+ffmpeg -ss <秒數> -i out/<folder>_noaudio.mp4 -frames:v 1 frame.png   # 抽影格人工檢查
+```
+- `overlapcheck*.py`、`pixel_table.py` 也接受資料夾的絕對路徑；`dumpcues.py` 只接受 `public/` 下的名稱。
+- 抽 6–8 張影格檢查：字幕單行、元素不重疊、cap 不遮擋、沒有殘值外露、split2 字級、片尾完整程式。
+- 有語音版再檢查音畫是否對齊。
+
+## 缺元件規則
+- autoanim 結尾的「缺元件警示」與 `warnings.json` 一定要看。status：支援／部分支援／退化／不支援。
+- 「不支援」（變數完全不顯示）與「退化」的項目，出片前要確認畫面仍可接受；不要假裝通用陣列版就是該結構的正確呈現。
+- 元件補齊後只改 `coverage.py`，再跑 `python3 tools/cpe-tools/sync_skill.py` 更新本檔的覆蓋表。
+
+## 版本控制注意
+- 只把工具與通用文件放進 git；題目解法 cpp、測資、narration json、mp4、影格截圖不要 commit。
+- `public/<folder>/` 是產出物，是否提交依專案慣例決定。
+
+## 疑難排解
+| 症狀 | 原因／處理 |
 |---|---|
-| 審片者 | Shan |
-| 總管／調度 | 大總管 |
-| 出片負責人 | CPE BOT |
-| 工程負責人 | Engineering Lead |
-| 實作工程師 | SWE |
-| 專案管理 | Projects Manager |
-
-## 端到端步驟
-1. 總管收題 → 派出片負責人立項；專案管理開 Notion 卡（沒卡不派工）。
-2. 整理答案：編譯＋樣例對拍；行寬縮到 split2 可顯示（單行 ≤58 字元）→ 本機工作目錄的 `<名>.cpp/.in/.out`（不上遠端）。
-3. autoanim 產基礎 story → 看缺元件警示（見「缺元件規則」）。
-4. narrate：dump → 寫 narration.json → apply（exit 0、warning 0）。
-5. 無語音 render → `<review_dir>/<名>_noaudio.mp4`＋contact sheet → 必經檢查 → 轉審片者審。
-6. 審片者核可 → story-audio（聲音固定 onyx）→ 再 render → `<名>_onyx.mp4` → 內檢 → 交付路徑。
-7. 版面固定四段：題目說明 → 大概解法 → 程式講解（split2）→ 片尾 fullcode。
-
-## autoanim
-```
-cd tools/cpe-tools
-../../backend/.venv/bin/python autoanim.py <base_folder> \
-  --cpp <X.cpp> --stdin <X.in> --expect <X.out> --layout split2 --title "<標題>"
-```
-- 做什麼：tree-sitter 插樁 → 沙箱跑原版與插樁版（須輸出一致且吻合 expect）→ 事件流 → 基礎 story → 自我對拍。
-- 輸出：`public/<base_folder>/{story.json, code.cpp, verify.json, trace_events.json, narr_meta.json, warnings.json}`。
-- base 命名建議 `auto_<題>_base`；folder 已存在不覆蓋，改加後綴。
-- 常用旗標：`--layout split|split2|concept|wide`（教學片用 split2；fullcode 只是 narrate 片尾場景，不是 layout）、`--show-born`（有解路徑上只設一次的純量也顯示）、`--no-comps`／`--disable graph,seq,slots,tree,keyed`、`--stage-fit auto|off`。
-- 動畫元件（comps.py）：graph、seq（queue／stack／pq）、slots、tree、keyed（map／set）；條件符合才自動認領。
-- 限制概要：1D ≤16、2D ≤8×10、純量 ≤8；旁白是模板，需 narrate 層補「為什麼」。
-- 陣列只顯示「程式有寫入過的格子」；未初始化的殘值格顯示「?」（避免顯示垃圾值）。
-- 指標 marker：當索引用的純量顯示成 ▲名稱；黃＝本 cue 改變，綠＝本場先前已定案；變數離開作用域、或未初始化殘值（第一次被改之前）時收起。
-
-## narrate（旁白層）
-```
-cd tools/cpe-tools
-python3 narrate.py dump <base_folder>
-python3 narrate.py apply <base_folder> <本機>/<題>.narration.json <new_folder>
-```
-- apply 不改任何 op（畫面＝trace），只合併文字並驗證：數字／字母／claims 對 trace、規則（字幕 chunk ≤18、cap ≤14 不重複旁白、每場 45–70 字、「這裡要注意」全片 ≤1、相鄰場景開頭不同、旁白不含 `[]=<>{}`）。
-- 會自動跑 `story-build --no-audio`；失敗（✗）就修 narration.json 重跑。
-- 有元件時 cue 數會變，務必重跑 dump 再寫 narration；`merge_into_prev` 只能併高亮行相同的逐事件 cue。
-- 風格：台灣講師口語、先目標再為什麼；數字中文口說、符號寫成字；不提殘值；結尾＝核心想法＋一個常見陷阱；畫面缺的視覺不要說有。
-
-## Remotion render＋TTS
-```
-cd <repo 根目錄>
-node scripts/story-build.mjs <folder> --no-audio
-node scripts/story-render.mjs <folder> --no-audio <review_dir>/<名>_noaudio.mp4
-# 審片者核可後才做：
-npm run story-audio <folder> [--force]
-node scripts/story-render.mjs <folder> <review_dir>/<名>_onyx.mp4
-```
-- render 約 2–3 分鐘，背景跑、同時只跑一支。
-- TTS：OpenAI，聲音固定 onyx（本團隊審片者定案，除非要求不換）；需 `OPENAI_API_KEY`（只走安全輸入，不貼、不印）。換聲音要 `--force`。
-- 備援：edge-tts（`npm run gen-audio` 之外的本機腳本，不在本 repo）。
-- 交付前 `ffprobe` 取長度、`ls -l` 取大小。
-
-## 必經檢查（每支片都跑）
-檢查器在 repo 內 `tools/cpe-tools/`（overlapcheck.py／overlapcheck_strict.py／dumpcues.py）。
-```
-cd tools/cpe-tools
-PY=../../backend/.venv/bin/python
-PYTHONPATH=. $PY overlapcheck.py <folder>          # 重疊／出界 = 0
-PYTHONPATH=. $PY overlapcheck_strict.py <folder>   # 含 plain 標籤 = 0
-PYTHONPATH=. $PY dumpcues.py <folder> <前綴…>       # 抽查 cue 結束狀態
-cat ../../public/<folder>/verify.json
-cat ../../public/<folder>/narr_verify.json
-cat ../../public/<folder>/warnings.json
-cd ../.. && npx tsc --noEmit                 # 有動到 src 時
-ffmpeg -ss <T> -i <review_dir>/<名>.mp4 -frames:v 1 -vf crop=860:520:1060:130 <review_dir>/<名>_t<T>.png
-```
-- 抽 6–8 張影格拼 contact sheet：字幕單行、元素不重疊、cap 不遮擋、無殘值外露、split2 字級、片尾 fullcode。
-- onyx 版另查音畫是否對齊。
-
-## 缺元件規則（必守）
-- autoanim 結尾「██ 缺元件警示 N 項 ██」與 `warnings.json` 一定要看。
-- 貼審稿 mp4 時逐項寫：缺哪種呈現／目前退化成什麼畫面／補元件預估工時，並問審片者「照退化版出」或「先補元件」。無警示要明寫「無缺元件警示」。
-- status 為「不支援」（變數完全不顯示）出片前一定要審片者確認。
-- 不可默默用通用陣列版蒙混。
-- 元件補齊後只改 `coverage.py`，再跑 `python3 sync_skill.py` 同步覆蓋表。
-
-## 關卡（沒有審片者同意不做）
-- push、merge main、對外發佈。
-- 完整解法 cpp、mp4、測資、narration json 不上遠端（只推工具層）。
-- TTS 正式產生（無語音版核可前不跑 story-audio）。
-- draft PR 只在審片者說了之後開，並講清 GitHub 或 Cursor Origin。
-
-## 輸出路徑慣例
-- 工具：repo 內 `tools/cpe-tools/`；樣本、旁白 json 只放本機工作目錄，不進 git。
-- 影片資料：`public/<folder>/`。
-- 審片暫存：`<review_dir>/<名>_noaudio.mp4`、`<名>_onyx.mp4`、contact sheet、報告（不進 git）。
-
-## ENG_NEEDED 交接
-出片負責人遇到缺元件／tracer 不支援／工具 bug 時，回總管標 `ENG_NEEDED`，內容含：
-- folder 與 warnings.json 項目（type、status、evidence 行號、now、missing、eta）。
-- 重現指令（autoanim 完整命令列，路徑用 placeholder，不貼解法全文）。
-- 驗收條件：autoanim 對拍全過、overlap／strict＝0、`npx tsc --noEmit` 過、舊樣本不退步。
-流程：總管 → 工程負責人拆工 → 實作工程師修 tools/cpe-tools → 驗收後交回出片負責人重跑出片。
+| `ModuleNotFoundError: tree_sitter`（或 `tree_sitter_cpp`、`anyio`） | 用裝了這些套件的 Python 執行 autoanim（見「安裝」） |
+| `伺服器沒有 C++ 編譯器` | 安裝 g++／clang++，或設定 `CPE_CXX` 指向編譯器；`CPE_CXX 指定的編譯器找不到` 表示該名稱不在 PATH |
+| `⚠ 插樁版輸出與原版不同，中止`（exit 2） | 插樁影響了程式行為（常見：未定義行為、讀未初始化變數）；先修程式讓輸出穩定 |
+| `⚠ 原版輸出與預期不符`（exit 2） | `--expect` 檔與實際輸出不同（注意行尾空白、結尾換行） |
+| `沒有任何追蹤事件`（exit 3） | 程式沒有可追蹤的變數變化；確認輸入有被讀到、變數型別受支援 |
+| 程式逾時／被終止 | 沙箱執行上限約 3 秒 CPU、512 MB 記憶體（Linux）、不可 fork；改用更小的輸入 |
+| `限制:` 訊息或畫面只顯示部分陣列 | 超過顯示上限；縮小輸入 |
+| narrate `驗證失敗（N 項）`（exit 1） | 依 ✗ 訊息修 narration.json：每個原 cue 都要有一筆、數字必須能在該 cue 的事實集合找到（或用 `allow_numbers`）、字幕／cap 長度規則 |
+| `fullcode[...] 程式 N 行 > 容量 50` 或單行 >58 字元 | 精簡程式或分段；或在 narration 頂層加 `"fullcode_allow_overflow": true` 降為警示 |
+| `OPENAI_API_KEY 未設定` | 在環境變數設定後再跑 `story-audio` |
+| story-build 報 `ffprobe` 錯誤 | 安裝 ffmpeg（含 ffprobe），或先用 `--no-audio` |
+| story-build／narrate 出現字數或 cap 警告 | 依訊息調整旁白（每場 45–70 字、字幕片段 ≤18 字、cap ≤14 字且不重複旁白） |
 
 ---
 
@@ -136,7 +161,7 @@ ffmpeg -ss <T> -i <review_dir>/<名>.mp4 -frames:v 1 -vf crop=860:520:1060:130 <
 
 - `npm run story-build <folder>`：量每句旁白音檔長度（沒音檔就以約 4.3 字/秒估算），產出 `timeline.json` 並做規則檢查（旁白字數、字幕片段 ≤18 字、cap ≤14 字且不重複旁白、相鄰場景開頭不同、「這裡要注意」≤1 次）。
 - `npm run story-render <folder> [--no-audio] [out.mp4]`：無語音版用 `--no-audio`；有 `audio/<cueId>.mp3` 時自動用真實長度並混音。
-- `npm run story-audio <folder> [--force]`：逐句（cue）產 TTS（onyx；可用 `TTS_INSTRUCTIONS` 覆寫）。**審片者核准後才跑。**
+- `npm run story-audio <folder> [--force]`：逐句（cue）產 TTS；聲音與語氣可用環境變數 `OPENAI_TTS_VOICE`、`TTS_INSTRUCTIONS` 設定。建議無語音版確認後再跑（會呼叫付費 API）。
 
 ### story.json 結構
 `scenes[] → cues[]`。每個 cue = 一句旁白（也是一句字幕來源）：
@@ -247,7 +272,7 @@ autoanim 在 `plan_display` 後呼叫 `comps.select()`：**程式用法＋trace 
 ### 新增元件步驟
 1. 在 `comps.py` 寫 Comp 子類（`prepare` 算 frames／expects）＋`select` 認領條件。
 2. 補 `coverage.py` 的 `WITH_COMPONENT`（與 `COVERAGE`）。
-3. `python3 sync_skill.py`（把覆蓋表貼回帶 `<!--COVERAGE-->` 標記的 SKILL）。
+3. `python3 sync_skill.py`（把覆蓋表寫回本檔的覆蓋表標記之間）。
 4. 做一個本機樣本（`<名>.cpp/.in/.out`，不進 git）→ autoanim 對拍＋overlapcheck＋渲染抽影格＋`npx tsc --noEmit`＋舊樣本不退步。
 
 ---
@@ -270,7 +295,7 @@ autoanim 在 `plan_display` 後呼叫 `comps.select()`：**程式用法＋trace 
 | priority_queue | 退化：tracer 已支援（元素為 int 等基本型別），但沒有選用元件時畫面不顯示 | **部分支援**（元件 `seq:priority_queue`）：依優先序（頂→底）排列的卡片列，堆頂黃色（≤12 項） | 堆的內部樹形、pair／struct 元素（tracer 不支援） | 樹形堆約 1 天；pair 追蹤約 0.5 天 |
 | 樹（以陣列表示：left[]／right[]／ch[][2]／parent[]） | 退化：以陣列格顯示（看不出樹形） | **部分支援**（元件 `tree`）：節點圓＋父子連線（left/right 陣列表示），新節點綠、走訪中節點黃；≤15 節點（節點直徑依深度／寬度自動縮） | 旋轉動畫（AVL／Splay）、>15 節點、struct＋指標型的樹 | 旋轉約 1 天；struct＋指標約 2–3 天 |
 | 樹（struct Node＋指標／new） | 不支援：struct／指標未被追蹤，整棵樹不顯示 | —（未選用元件，維持左欄） | tracer 支援 struct 與指標（以位址對應節點編號） | 約 2–3 天 |
-| 槽位列（排列／配置／信箱，如 res[] 為排列） | 退化：一般陣列格（沒有卡片移入槽位） | **部分支援**（元件 `slots`）：槽位列＋人物卡片移入槽位（自動條件：長度 3–10 的整數排列陣列且逐格寫入）；人員卡（字母＋個數）與空槽從計數階段就顯示，槽位標 最外／次外／中間（人員題）；伴隨陣列顯示在卡片副標；建議搭配 autoanim --layout wide（1.2 倍舞台） | 題目專屬的對應標示（如 rc 虛線映射、手工 v2 的目標數量卡 tX）、不是排列型的配置／雜湊桶；卡片尺寸小於手工 v2 | 雜湊桶變體約 0.5 天 |
+| 槽位列（排列／配置／信箱，如 res[] 為排列） | 退化：一般陣列格（沒有卡片移入槽位） | **部分支援**（元件 `slots`）：槽位列＋人物卡片移入槽位（自動條件：長度 3–10 的整數排列陣列且逐格寫入）；人員卡（字母＋個數）與空槽從計數階段就顯示，槽位標 最外／次外／中間（人員題）；伴隨陣列顯示在卡片副標；建議搭配 autoanim --layout wide（1.2 倍舞台） | 題目專屬的對應標示（如 rc 虛線映射、手工版的目標數量卡 tX）、不是排列型的配置／雜湊桶；卡片尺寸小於手工版 | 雜湊桶變體約 0.5 天 |
 | 雜湊／桶（h[x % M]、bucket[]） | 退化：一般陣列格 | —（未選用元件，維持左欄） | 桶列＋元素落桶動畫 | 約 0.5 天（沿用槽位列） |
 | map／unordered_map | 不支援：tracer 已支援（鍵值為基本型別），但沒有選用元件時畫面不顯示 | **部分支援**（元件 `keyed:map`）：依鍵排序的 key／value 卡片列（≤12 個鍵），新鍵綠、值變黃 | pair／struct 當鍵或值、>12 個鍵、unordered 的內部桶序 | 約 0.5 天 |
 | set／unordered_set／multiset | 不支援：tracer 已支援（元素為基本型別），但沒有選用元件時畫面不顯示 | **部分支援**（元件 `keyed:set`）：依序排列的集合卡片列（≤12 個元素），新元素綠 | pair／struct 元素、>12 個元素 | 約 0.5 天 |
@@ -287,7 +312,8 @@ autoanim 在 `plan_display` 後呼叫 `comps.select()`：**程式用法＋trace 
 | 超過顯示上限（1D>16、2D>8×10、純量>8） | 部分支援：只顯示前段／左上 | —（未選用元件，維持左欄） | 縮放或分頁顯示 | 約 0.5 天 |
 <!--/COVERAGE-->
 
-> `tools/cpe-tools/sync_skill.py` 寫入目標：repo 根目錄的 `skill.md`（repo-relative，本檔）。
+> 這張表由 `python3 tools/cpe-tools/sync_skill.py` 從 `tools/cpe-tools/coverage.py` 產生並寫回本檔（`skill.md`）的標記之間。
+
 
 ---
 
@@ -297,12 +323,12 @@ autoanim 在 `plan_display` 後呼叫 `comps.select()`：**程式用法＋trace 
 
 ---
 
-## 附錄 B：手動 config 流程（原 /cpe-video skill，併入）
+## 附錄 B：手動 config 流程（config.json＋累加 cpp）
 
 
 ### 何時用手動流程
 
-當使用者想從零建立一支教學影片時使用此 skill，包括：
+當使用者想用手動切片方式從零建立一支教學影片時使用此流程，包括：
 
 - 「建新影片」「從零開始做影片」
 - 明確呼叫 `/cpe-video`
@@ -322,8 +348,7 @@ autoanim 在 `plan_display` 後呼叫 `comps.select()`：**程式用法＋trace 
 執行以下檢查，**任一失敗就停下來**告訴使用者如何修正，等修好再繼續：
 
 1. 確認在專案根目錄執行（`public/` 目錄存在）
-2. `.env` 檔案存在
-3. `.env` 中有 `GOOGLE_APPLICATION_CREDENTIALS`，且該路徑的 JSON 檔案存在
+2. TTS 憑證已用環境變數提供：`TTS_PROVIDER=openai`（預設）需 `OPENAI_API_KEY`；`TTS_PROVIDER=google` 需 `GOOGLE_APPLICATION_CREDENTIALS` 指向存在的 JSON 金鑰檔
 
 全部通過後回報：
 ```

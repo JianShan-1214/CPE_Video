@@ -503,7 +503,7 @@ class SlotsComp(Comp):
         R = state.get(self.res)
         if R is None and not (self.compv and isinstance(state.get(self.compv), list)):
             self._frame(ei, {}); self.expects[ei] = {}; return
-        if R is None: R = []      # 結果陣列還沒出生：先顯示人員卡（含計數）與空槽位，與手工 v2 一致
+        if R is None: R = []      # 結果陣列還沒出生：先顯示人員卡（含計數）與空槽位，與手工版一致
         new_slots = set()
         for (l, expr) in self.writes:
             if ev["line0"] <= l <= ev["line1"]:

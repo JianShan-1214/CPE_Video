@@ -219,7 +219,7 @@ def _verify_scene(R, sc, spec, si, scenes, state, owner, base_ids, min_font, fir
 
 
 # ── D-020 E1：fullcode 場景對程式碼與停留時間的檢查（narrate.py 呼叫）──
-# 容量依幾何計算（不寫死 40）：每欄 floor((bottomMax 975 − y0 140 − 2×pad 4)/行高 33)=25 列，兩欄 50 行；與 timeline.ts／stagefit.FULLCODE 相同（tests_d020 對拍）
+# 容量依幾何計算（不寫死 40）：每欄 floor((面板底上限 975 − y0 140 − 2×pad 4)/行高 33)=25 列，兩欄 50 行；與 timeline.ts／stagefit.FULLCODE 相同（tests_d020 對拍）
 FULL_MAX_LINES, FULL_MAX_COLS, FULL_MIN_DWELL = 2 * ((975 - 140 - 2 * 4) // 33), 58, 15.0
 CPS, LEAD, PAUSE, SCENE_GAP = 4.3, 0.25, 0.4, 0.5      # 與 scripts/story-build.mjs 的估算常數相同
 
@@ -237,7 +237,7 @@ def check_fullcode(code, scene, tab=4):
     errs, warns = [], []
     lines = code.rstrip().split("\n") if code.strip() else []
     if len(lines) > FULL_MAX_LINES:
-        errs.append(f"fullcode[{scene['id']}] 程式 {len(lines)} 行 > 容量 {FULL_MAX_LINES}：整份程式放不進雙欄（需 CPE BOT 精簡或分段）")
+        errs.append(f"fullcode[{scene['id']}] 程式 {len(lines)} 行 > 容量 {FULL_MAX_LINES}：整份程式放不進雙欄（需精簡或分段）")
     long_ = [(i + 1, len(l.expandtabs(tab))) for i, l in enumerate(lines) if len(l.expandtabs(tab)) > FULL_MAX_COLS]
     if long_:
         errs.append(f"fullcode[{scene['id']}] {len(long_)} 行超過 {FULL_MAX_COLS} 字元（行:字元數 {long_[:8]}{'…' if len(long_) > 8 else ''}）：24px 雙欄會被截斷；請先排版成每行 ≤{FULL_MAX_COLS}（D2）")

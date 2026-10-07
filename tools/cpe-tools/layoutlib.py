@@ -62,7 +62,7 @@ def layout(plan, init_state, x0=128, wavail=1060, ystart=None, name_x=0, nrows=0
             unit = (H - yy - 6 - fixed) / max(1, n1 + 3 * len(n2))
         else:
             unit = (H - yy - 6 - sum(gextra.values())) / max(1, n1 + 3 * len(n2))
-        bottom = yy
+        low_y = yy
         for g in groups:
             ai0 = info[g[0]]
             if ai0["kind"] != "arr2":
@@ -71,7 +71,7 @@ def layout(plan, init_state, x0=128, wavail=1060, ystart=None, name_x=0, nrows=0
                     ch = int(max(28, min(86, unit))); rowh = ch + 6 + (P * npg + 4 if npg else 0)
                 else:
                     rowh = min(130, unit); ch = max(36, rowh - 44); rowh = max(rowh, ch + 10) + gextra[g[0]]
-                    if npg: rowh = max(rowh, ch + 2 + P * npg + 4)   # CPE-008：格高夾在下限 36 時，▲ 列不得伸進下一列的格子（原本只在 bottom 計入）
+                    if npg: rowh = max(rowh, ch + 2 + P * npg + 4)   # CPE-008：格高夾在下限 36 時，▲ 列不得伸進下一列的格子（原本只在 low_y 計入）
                 W2 = int(total_w / 2)
                 for k, a in enumerate(g):
                     ai = info[a]
@@ -85,7 +85,7 @@ def layout(plan, init_state, x0=128, wavail=1060, ystart=None, name_x=0, nrows=0
                     for i in range(L):
                         out[f"c_{a}_{i}"] = dict(x=cx0 + i * (w + 8), y=yy, w=w, h=ch, fs=fs, sfs=20)
                     ai.update(cw=w, cx0=cx0, cy=yy, ch=ch, gap=8)
-                    bottom = max(bottom, yy + ch + 2 + P * np_[a] + 4)
+                    low_y = max(low_y, yy + ch + 2 + P * np_[a] + 4)
                 yy += rowh
             else:
                 a = g[0]; ai = ai0
@@ -102,17 +102,17 @@ def layout(plan, init_state, x0=128, wavail=1060, ystart=None, name_x=0, nrows=0
                         out[f"c_{a}_{i}_{j}"] = dict(x=x0 + j * (w + 8), y=yy + i * (ch + 6), w=w, h=ch, fs=fs, sfs=18)
                 ai.update(cw=w, cx0=x0, cy=yy, ch=ch, gap=8)
                 yy += R * (ch + 6) + 8
-                bottom = max(bottom, yy)
-        return out, bottom
+                low_y = max(low_y, yy)
+        return out, low_y
 
     if arrays and content_h:   # CPE-008：內容高上限（split2 右窗 1020×800 比例較高，寬受限時高度不是瓶頸）→ 直接用這個高度排；None＝與以前相同
-        out, bottom = build(False, content_h)
-        if bottom > content_h - 2: out, bottom = build(True, content_h)
+        out, low_y = build(False, content_h)
+        if low_y > content_h - 2: out, low_y = build(True, content_h)
         els.update(out)
     elif arrays:
-        out, bottom = build(False)
-        if bottom > 458: out, bottom = build(True)
-        if bottom > 458: out, bottom = build(True, 580)   # 舞台框外仍可見（框外沒有裁切，影片下方有空間）：內容真的放不下才往下延伸
+        out, low_y = build(False)
+        if low_y > 458: out, low_y = build(True)
+        if low_y > 458: out, low_y = build(True, 580)   # 舞台框外仍可見（框外沒有裁切，影片下方有空間）：內容真的放不下才往下延伸
         els.update(out)
     return els
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """autoanim：貼「答案 C++ + 一組小輸入」→ 自動追蹤 → 事件流 → Story 基礎版動畫（不需手寫座標／時間）。
 
-用法（用 backend 的 venv 執行，才有沙箱 runner）：
-  backend/.venv/bin/python autoanim.py <folder> --cpp ans.cpp --stdin in.txt --expect out.txt --title "題目"
+用法（需 Python 3.12+，並安裝 tree-sitter、tree-sitter-cpp、anyio；沙箱 runner 由 repo 的 backend/ 提供）：
+  python autoanim.py <folder> --cpp ans.cpp --stdin in.txt --expect out.txt --title "題目"
 輸出 public/<folder>/{story.json,code.cpp,trace_events.json,verify.json}
 """
 import argparse, asyncio, json, re, sys
@@ -783,7 +783,7 @@ async def amain():
     ap = argparse.ArgumentParser()
     ap.add_argument("folder"); ap.add_argument("--cpp", required=True); ap.add_argument("--stdin", required=True)
     ap.add_argument("--expect"); ap.add_argument("--title", default=""); ap.add_argument("--no-comps", action="store_true", dest="no_comps"); ap.add_argument("--disable", default="")
-    ap.add_argument("--out", default=str(Path(__file__).resolve().parents[2] / "public")); ap.add_argument("--layout", default="split", choices=["split", "split2", "concept", "wide"], help="split＝左程式右動畫（預設）；split2＝D-020 E2：左程式面板 820×852（字級 22、單行 ≤58 字元不截、約 22 行）＋右窗 1020×800（A1 判全額）；fullcode 只用於 narrate 的片尾場景，不是整片版面；concept＝1.45 倍舞台＋小程式列（舞台限高 460）；wide＝1.2 倍舞台（可到 580 高）＋小程式列（手工 v2 風格）")
+    ap.add_argument("--out", default=str(Path(__file__).resolve().parents[2] / "public")); ap.add_argument("--layout", default="split", choices=["split", "split2", "concept", "wide"], help="split＝左程式右動畫（預設）；split2＝D-020 E2：左程式面板 820×852（字級 22、單行 ≤58 字元不截、約 22 行）＋右窗 1020×800（A1 判全額）；fullcode 只用於 narrate 的片尾場景，不是整片版面；concept＝1.45 倍舞台＋小程式列（舞台限高 460）；wide＝1.2 倍舞台（可到 580 高）＋小程式列（手工版風格）")
     ap.add_argument("--stage-fit", default="auto", choices=["auto", "off"], dest="stage_fit", help="CPE-003：auto（預設）＝story 加 stageFit=auto（動畫區依內容自適應放大）並把最小可讀尺寸警示（type=stage_fit）寫入 warnings.json；off＝關閉，行為與以前相同")
     ap.add_argument("--stage-w", type=int, default=None, dest="stage_w", help="D-020 E3：虛擬舞台寬（<1200 時，有頂部槽位列的 story 啟用窄版：槽卡寬≤120、說明欄 110、陣列不左右成對）；預設：--layout split2→1000，其餘 1200（逐值不變）")
     ap.add_argument("--show-born", action="store_true", dest="show_born", help="CPE-008：main 迴圈內宣告、設過一次就不再改的純量（如找到解那條路徑上的 d／c／t／k）也顯示（chip 或 ▲指標）；預設關閉＝與以前逐值相同")
