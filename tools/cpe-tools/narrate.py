@@ -5,7 +5,7 @@
                                             合併旁白 → 驗證（畫面對拍／數字核對／規則）→ 寫出新 story 資料夾 → story-build
 不改動、不刪除任何 op 的內容（畫面狀態＝trace 不變）；唯一允許的是 merge_into_prev（把逐事件 cue 的 ops 併入上一句，僅改 at 時間）。
 用法（任何 python3 皆可，不需 tree-sitter）：python3 narrate.py dump <folder>
-extra_scenes（CPE-004）：narration.json 的 "extra_scenes" 可插入「不屬於程式 trace」的場景。
+extra_scenes：narration.json 的 "extra_scenes" 可插入「不屬於程式 trace」的場景。
   舊式（只有 id/title/cues[text,cap,say,lines]）＝純旁白、沿用 base 版面（行為不變）。
   新式（任一場景有 layout／focus／no_code／allow_overlap，或任一 cue 有 ops）：
     layout: concept|wide|split2|fullcode（預設 concept）；focus: anim|code|both（預設 anim）；no_code（預設 layout==concept）＝整場不出現程式碼；
@@ -13,7 +13,7 @@ extra_scenes（CPE-004）：narration.json 的 "extra_scenes" 可插入「不屬
     新式場景的 ops 不進「畫面對拍／渲染順序重放／ops 未改動」，改由 introlib.verify_intro 另行驗證（見 introlib.py 檔頭）。
   頂層可加 "require_no_code_first": N（前 N 場必須是 no_code intro 場景）、"intro_min_font_px": 32（有效字級下限）。
   有 no_code 場景時輸出 story 的 revealAll 設為 false（否則渲染器會在 concept 場景底部顯示程式列）。
-D-020 新增：
+版面擴充（split2／fullcode／layout_override／layoutRev）：
   extra_scenes 的 layout="fullcode"＝片尾「完整程式碼」：整份程式雙欄一次秀出（不捲動、不截斷、字級 24、標題「完整程式碼」、不顯示 cap 與動畫舞台）。
     該場景不得帶 ops；cue 的 lines 可選（旁白講到哪段，該段輕微高亮；預設全亮）。apply 時檢查：程式超過幾何容量（50 行＝每欄 25 列，不寫死 40）、任一行 >58 字元 → 錯誤（narration 頂層
     "fullcode_allow_overflow": true 可降為警示）；估計停留 <15 秒 → 警示（寫入 narr_verify.json 與輸出）。
@@ -24,10 +24,10 @@ D-020 新增：
 import argparse, copy, json, os, re, subprocess, sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
-import stagefit  # CPE-003：舞台自適應的不渲染推算／警示
-import introlib  # CPE-004：新式 extra_scenes（layout／focus／intro_ ops）的獨立驗證器
+import stagefit  # 舞台自適應的不渲染推算／警示
+import introlib  # 新式 extra_scenes（layout／focus／intro_ ops）的獨立驗證器
 
-PUB = Path(os.environ.get("NARRATE_PUB", str(Path(__file__).resolve().parents[2] / "public")))   # CPE-004：測試可用環境變數改指到 /tmp 副本，預設不變
+PUB = Path(os.environ.get("NARRATE_PUB", str(Path(__file__).resolve().parents[2] / "public")))   # 測試可用環境變數改指到 /tmp 副本，預設不變
 REPO = Path(__file__).resolve().parents[2]
 SYM = "，。！？；：、"
 
@@ -216,7 +216,7 @@ def walk_ints(v, acc):
 
 
 def get_path(state, path):
-    m = re.match(r"^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)((?:\[\d+\])*)$", path, A)   # CPE-008：struct 欄位列 p.s[4]
+    m = re.match(r"^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)((?:\[\d+\])*)$", path, A)   # struct 欄位列 p.s[4]
     if not m or m.group(1) not in state: raise KeyError(path)
     v = state[m.group(1)]
     for ix in re.findall(r"\[(\d+)\]", m.group(2)): v = v[int(ix)]
@@ -305,13 +305,13 @@ class Checker:
             if a_ not in self.varnames: self.err(cid, f"about 指到不存在的顯示變數 {a_}（可用 {sorted(self.varnames)}）")
         for m in re.finditer(r"(?<![\w\[])([A-Za-z_]\w*)(?![\w])", text + " " + cap, A):
             if m.group(1) in self.varnames and m.group(1) not in about: about.append(m.group(1))
-        for m in re.finditer(r"(?<![\w\[.])([A-Za-z_]\w*\.[A-Za-z_]\w*)(?![\w])", text + " " + cap, A):   # CPE-008：struct 欄位列 p.s
+        for m in re.finditer(r"(?<![\w\[.])([A-Za-z_]\w*\.[A-Za-z_]\w*)(?![\w])", text + " " + cap, A):   # struct 欄位列 p.s
             if m.group(1) in self.varnames and m.group(1) not in about: about.append(m.group(1))
         strict, loose = self.facts(cx, about)
         allow = set(n.get("allow_numbers", []))
         # 1) 明確 claims（對本 cue 結束後的 trace 狀態；before. 前綴＝本 cue 開始前）
         for cl in n.get("claims", []):
-            m = re.match(r"^(before\.)?([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?(?:\[\d+\])*)\s*(==|=|!=)\s*(.+)$", cl.strip(), A)   # CPE-008：允許 p.s[4]=10
+            m = re.match(r"^(before\.)?([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?(?:\[\d+\])*)\s*(==|=|!=)\s*(.+)$", cl.strip(), A)   # 允許 p.s[4]=10
             if not m: self.err(cid, f"claims 格式錯誤：{cl}（範例 cnt[1]=4、before.i=0、ch=B）"); self.claims_bad += 1; continue
             st = cx["before"] if m.group(1) else cx["after"]
             try: got = get_path(st, m.group(2))
@@ -322,7 +322,7 @@ class Checker:
             else: self.claims_bad += 1; self.err(cid, f"claims 不符：{cl}，trace 實際 {m.group(2)}={got}")
         # 2) 旁白裡「變數 是／變成／等於 值」與「變數 從 X 變成 Y」逐句抽出比對
         VAL = r"(-?\d+|[零〇一二兩三四五六七八九十百]+|[A-Z])(?![\w])"
-        for m in re.finditer(r"(?<![\w\[.])([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?(?:\[\d+\])*)\s*(?:=|＝|是|變成|等於|變為)\s*" + VAL, text, A):   # CPE-008：p.i 是 1 → 查 p.i（不是 i）
+        for m in re.finditer(r"(?<![\w\[.])([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?(?:\[\d+\])*)\s*(?:=|＝|是|變成|等於|變為)\s*" + VAL, text, A):   # p.i 是 1 → 查 p.i（不是 i）
             name = m.group(1)
             if name.split("[")[0] not in self.varnames: continue
             gots = []
@@ -416,7 +416,7 @@ def renderer_order_verify(story, meta):
         for c in sc["cues"]:
             ops = sorted(enumerate(c.get("ops", [])), key=lambda t: (key_of(t[1]), t[0]))
             for _, o in ops:
-                if o["_g"].startswith("__intro__"): continue   # CPE-004：intro 場景的 ops 另行驗證
+                if o["_g"].startswith("__intro__"): continue   # intro 場景的 ops 另行驗證
                 if order[o["_g"]] < last_g: bad += 1; fails.append((c["id"], "順序", o["_g"], "op 組順序被打亂"))
                 last_g = max(last_g, order[o["_g"]])
                 apply_patch(cur, o)
@@ -550,7 +550,7 @@ def cmd_apply(a):
         add_extra(sc["id"])
     for sc in out_scenes:
         if len(sc["label"]) > 16: errors.append(f"{sc['id']} 標題太長（{len(sc['label'])}>16）")
-    # D-020：layout_override（base 場景改版面）
+    # layout_override（base 場景改版面）
     lo = nar.get("layout_override")
     OVR = ("concept", "wide", "split", "split2", "code", "fullcode")
     if lo is not None:
@@ -574,7 +574,7 @@ def cmd_apply(a):
     now_ops = [o["set"] for sc in story["scenes"] for c in sc["cues"] for o in c.get("ops", []) if not str(o.get("_g", "")).startswith("__intro__")]
     ops_unchanged = sorted(map(json.dumps, now_ops)) == sorted(map(json.dumps, base_ops))
     if not ops_unchanged: errors.append("內部錯誤：op 內容與原骨架不同（不允許）")
-    # (a0) CPE-004：新式 extra_scenes 獨立驗證（不進畫面對拍；程式碼面板可見性、intro_ 前綴／id 衝突／場尾淡出／殘留／字級／重疊）
+    # (a0) 新式 extra_scenes 獨立驗證（不進畫面對拍；程式碼面板可見性、intro_ 前綴／id 衝突／場尾淡出／殘留／字級／重疊）
     intro_rep = None
     req_n = nar.get("require_no_code_first", 0)
     if intro_specs or req_n:
@@ -582,7 +582,7 @@ def cmd_apply(a):
         base_ids = {eid for sc_ in base["scenes"] for c_ in sc_["cues"] for o_ in c_.get("ops", []) for eid in o_["set"]}
         intro_rep = introlib.verify_intro(story, intro_specs, base_ids, req_n, nar.get("intro_min_font_px", 32))
         errors += intro_rep.lines()
-    # (a0') D-020 E1：fullcode 場景（extra_scenes 或 layout_override）對程式碼的檢查
+    # (a0') fullcode 場景（extra_scenes 或 layout_override）對程式碼的檢查
     full_warns = []
     for sc_ in story["scenes"]:
         if sc_["layout"] == "fullcode":
@@ -592,19 +592,19 @@ def cmd_apply(a):
             else:
                 errors += fe
             full_warns += fw
-    # (a0'') D-020 E2：split2 場景的程式碼寬度（≤58 字元，A1 不截斷）；split2_allow_overflow:true 降為警示
+    # (a0'') split2 場景的程式碼寬度（≤58 字元，A1 不截斷）；split2_allow_overflow:true 降為警示
     sp2 = [sc_["id"] for sc_ in story["scenes"] if sc_["layout"] == "split2" or any(c_.get("layout") == "split2" for c_ in sc_["cues"])]
     if sp2:
         se = introlib.check_split2(code, sp2)
         if nar.get("split2_allow_overflow"): full_warns += [f"(允許溢出) {x}" for x in se]
         else: errors += se
-    # (a1) CPE-003：--stage-fit auto → 輸出 story 標 stageFit="auto"（渲染器依內容自適應舞台），並推算 A1 警示
+    # (a1) --stage-fit auto → 輸出 story 標 stageFit="auto"（渲染器依內容自適應舞台），並推算 A1 警示
     fit_ws = []
     sf_mode = getattr(a, "stage_fit", None) or ("auto" if story.get("stageFit") == "auto" else None)   # 沒指定時沿用 base（autoanim 預設 auto）
     if sf_mode == "off": stagefit.apply_stage_fit(story, "off")
     if sf_mode == "auto":
         stagefit.apply_stage_fit(story, "auto")
-        fit_ws = stagefit.fit_warnings(story, "fit", stagefit.load_degraded(d))   # D-012（F7）：base 資料夾 warnings.json 內退化的元件 → A1 該項 n/a
+        fit_ws = stagefit.fit_warnings(story, "fit", stagefit.load_degraded(d))   # base 資料夾 warnings.json 內退化的元件 → A1 該項 n/a
     # (a) 畫面對拍
     ok_a, bad_a, fails_a = replay_verify(story, meta)
     ok_r, bad_r, fails_r = renderer_order_verify(story, meta)
@@ -676,7 +676,7 @@ def main():
     p = sp.add_parser("dump"); p.add_argument("folder"); p.set_defaults(fn=cmd_dump)
     p = sp.add_parser("apply"); p.add_argument("folder"); p.add_argument("narration"); p.add_argument("new_folder")
     p.add_argument("--no-build", action="store_true")
-    p.add_argument("--stage-fit", choices=["auto", "off"], help="CPE-003：auto＝輸出 story 加 stageFit=auto（動畫區依內容自適應放大）並把最小可讀尺寸警示併入 warnings.json；off＝移除 stageFit 與 stage_fit 警示；不指定＝沿用 base（base 由 autoanim 產生時預設為 auto；舊 base 沒有 stageFit 則輸出與以前相同）")
+    p.add_argument("--stage-fit", choices=["auto", "off"], help="auto＝輸出 story 加 stageFit=auto（動畫區依內容自適應放大）並把最小可讀尺寸警示併入 warnings.json；off＝移除 stageFit 與 stage_fit 警示；不指定＝沿用 base（base 由 autoanim 產生時預設為 auto；舊 base 沒有 stageFit 則輸出與以前相同）")
     p.set_defaults(fn=cmd_apply)
     a = ap.parse_args(); a.fn(a)
 

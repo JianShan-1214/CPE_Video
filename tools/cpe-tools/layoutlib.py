@@ -1,12 +1,12 @@
 """版面幾何（純函式，不依賴 tree-sitter／沙箱，可被測試直接 import）。
-從 autoanim.py 抽出（CPE-003 D-006）：layout()（陣列列／純量 chip）、元件區域 comp_region()、build_geometry()（原 generate 的版面前段）、marker_els()（指標 ▲）。
-autoanim.generate 與離線重放測試（tests_cpe003/replay.py）共用同一份程式，確保測試的幾何 = 真正產生的幾何。"""
+從 autoanim.py 抽出：layout()（陣列列／純量 chip）、元件區域 comp_region()、build_geometry()（原 generate 的版面前段）、marker_els()（指標 ▲）。
+autoanim.generate 與離線重放測試共用同一份程式，確保測試的幾何 = 真正產生的幾何。"""
 
 PAIR_MAX = 10
 
 
 STAGE_W = 1200          # 虛擬舞台寬（預設，舊版面逐值不變）
-NARROW_STAGE_W = 1000   # D-020 E3 退路：split2 的槽位窄版（右窗 1020 寬 → 倍率 ≥1.0 → 槽卡 68×1.02≈69px）
+NARROW_STAGE_W = 1000   # 退路：split2 的槽位窄版（右窗 1020 寬 → 倍率 ≥1.0 → 槽卡 68×1.02≈69px）
 
 
 def is_narrow(zones, stage_w):
@@ -18,13 +18,13 @@ def layout(plan, init_state, x0=128, wavail=1060, ystart=None, name_x=0, nrows=0
     """回傳 elements: id -> props(x,y,w,h,fs,...)；舞台 1200×460（narrow：寬 stage_w≈1000，成對陣列改上下排）"""
     els = {}
     info = plan["info"]
-    # CPE-003 D-007：頂部有槽位列（compact）時，指標 ▲ 列距 26→22、字 24→20（成片仍 ≥26px），省下高度給放大的槽位卡
+    # 頂部有槽位列（compact）時，指標 ▲ 列距 26→22、字 24→20（成片仍 ≥26px），省下高度給放大的槽位卡
     P, PH, PF = (22, 22, 20) if compact else (26, 30, 24)
     plan["ptr_geom"] = (P, PH, PF)
     y = 8 if compact else 14
     plan["row_ys"] = []
     if plan["chips"]:
-        # CPE-003 D-012（F2）：右側有堆疊欄（x≥1040）時，chip 列不得伸進去：放得下就維持原本 146 間距／136 寬；放不下（8 個 chip）改均分（間距 128、寬 118）
+        # 右側有堆疊欄（x≥1040）時，chip 列不得伸進去：放得下就維持原本 146 間距／136 寬；放不下（8 個 chip）改均分（間距 128、寬 118）
         nchip = len(plan["chips"]); pitch, cw_ = 146, 136
         if chip_xmax is not None and 10 + 146 * (nchip - 1) + 136 > chip_xmax:
             pitch = int((chip_xmax - 10) / nchip); cw_ = pitch - 10
@@ -37,8 +37,8 @@ def layout(plan, init_state, x0=128, wavail=1060, ystart=None, name_x=0, nrows=0
     arrays = plan["arrays"]
     y_arr = y
 
-    # CPE-003 D-007：頂部有槽位列（compact）時，相鄰兩個 ≤PAIR_MAX 格的一維陣列左右並排（省一整列的高度）；其他情形與以前逐值相同
-    # D-012（F1）：PAIR_MAX 6→10（槽位 7–10 格時 cnt／c 不再各佔一列；半寬 466px 放 10 格仍有格寬 38、字 24）
+    # 頂部有槽位列（compact）時，相鄰兩個 ≤PAIR_MAX 格的一維陣列左右並排（省一整列的高度）；其他情形與以前逐值相同
+    # PAIR_MAX 6→10（槽位 7–10 格時 cnt／c 不再各佔一列；半寬 466px 放 10 格仍有格寬 38、字 24）
     groups, gi = [], 0
     while gi < len(arrays):
         a0 = arrays[gi]
@@ -71,7 +71,7 @@ def layout(plan, init_state, x0=128, wavail=1060, ystart=None, name_x=0, nrows=0
                     ch = int(max(28, min(86, unit))); rowh = ch + 6 + (P * npg + 4 if npg else 0)
                 else:
                     rowh = min(130, unit); ch = max(36, rowh - 44); rowh = max(rowh, ch + 10) + gextra[g[0]]
-                    if npg: rowh = max(rowh, ch + 2 + P * npg + 4)   # CPE-008：格高夾在下限 36 時，▲ 列不得伸進下一列的格子（原本只在 low_y 計入）
+                    if npg: rowh = max(rowh, ch + 2 + P * npg + 4)   # 格高夾在下限 36 時，▲ 列不得伸進下一列的格子（原本只在 low_y 計入）
                 W2 = int(total_w / 2)
                 for k, a in enumerate(g):
                     ai = info[a]
@@ -79,7 +79,7 @@ def layout(plan, init_state, x0=128, wavail=1060, ystart=None, name_x=0, nrows=0
                     L = ai["n"]
                     w = max(24, min(92, int((wav - 8 * L) / L)))
                     fs = 38 if w >= 70 else (30 if w >= 50 else (24 if w >= 34 else 20))
-                    gw = ai.get("maxgw")   # CPE-008：內容寬受限（content_w）時才有：全片最寬格文字（em）→ 字級降到放得進格內寬（w-8）；沒有＝與以前相同
+                    gw = ai.get("maxgw")   # 內容寬受限（content_w）時才有：全片最寬格文字（em）→ 字級降到放得進格內寬（w-8）；沒有＝與以前相同
                     while gw and fs > 20 and gw * fs > w - 8: fs = {38: 30, 30: 24, 24: 20}[fs]
                     out[f"n_{a}"] = dict(x=nx, y=yy, w=118, h=ch, fs=30, plain=True)
                     for i in range(L):
@@ -105,7 +105,7 @@ def layout(plan, init_state, x0=128, wavail=1060, ystart=None, name_x=0, nrows=0
                 low_y = max(low_y, yy)
         return out, low_y
 
-    if arrays and content_h:   # CPE-008：內容高上限（split2 右窗 1020×800 比例較高，寬受限時高度不是瓶頸）→ 直接用這個高度排；None＝與以前相同
+    if arrays and content_h:   # 內容高上限（split2 右窗 1020×800 比例較高，寬受限時高度不是瓶頸）→ 直接用這個高度排；None＝與以前相同
         out, low_y = build(False, content_h)
         if low_y > content_h - 2: out, low_y = build(True, content_h)
         els.update(out)
@@ -146,7 +146,7 @@ def comp_region(c, plan, ytop, stage_w=STAGE_W):
 
 def build_geometry(comps, plan, init_state, cell_fn, events, stage_w=STAGE_W, content_w=None, content_h=None):
     """依元件決定 ytop／lay，排好陣列列並讓每個元件 prepare+finalize。回傳 (els, dict(ytop, lay, compact, narrow, stage_w))
-    stage_w（D-020 E3）：虛擬舞台寬；預設 1200＝與以前逐值相同。<1200 且有頂部槽位列、無左／右欄元件時才啟用窄版（槽卡縮、說明欄縮、陣列不再左右成對）。"""
+    stage_w：虛擬舞台寬；預設 1200＝與以前逐值相同。<1200 且有頂部槽位列、無左／右欄元件時才啟用窄版（槽卡縮、說明欄縮、陣列不再左右成對）。"""
     zones = {c.zone for c in comps}
     narrow = is_narrow(zones, stage_w)
     if not narrow: stage_w = STAGE_W
@@ -154,10 +154,10 @@ def build_geometry(comps, plan, init_state, cell_fn, events, stage_w=STAGE_W, co
     ytop = (8 + 76 if compact else 14 + 104) if plan["chips"] else (8 if compact else 14)
     lay = dict(x0=128, wavail=1060, ystart=None, name_x=0, nrows=sum(1 for c in comps if c.zone == "row"))
     if "left" in zones: lay.update(name_x=480, x0=608, wavail=1200 - 608 - 10)
-    if "right" in zones: lay["wavail"] -= 170; lay["chip_xmax"] = 1030    # 堆疊欄 x≥1040；chip 列不得伸進去（D-012 F2）
+    if "right" in zones: lay["wavail"] -= 170; lay["chip_xmax"] = 1030    # 堆疊欄 x≥1040；chip 列不得伸進去
     if narrow:
         lay["wavail"] = 1060 - (STAGE_W - stage_w); lay["chip_xmax"] = stage_w - 6; lay["narrow"] = True
-    if content_w:   # CPE-008：右窗內容寬上限（虛擬座標；陣列列與 chip 列都不超過），None＝與以前逐值相同
+    if content_w:   # 右窗內容寬上限（虛擬座標；陣列列與 chip 列都不超過），None＝與以前逐值相同
         lay["wavail"] = min(lay["wavail"], content_w - lay["x0"]); lay["chip_xmax"] = min(lay.get("chip_xmax", content_w), content_w)
     if content_h: lay["content_h"] = content_h
     if "top" in zones: lay["ystart"] = ytop - 4 + max((getattr(c, "height", 122) for c in comps if c.zone == "top"), default=122) + 6
@@ -170,7 +170,7 @@ def build_geometry(comps, plan, init_state, cell_fn, events, stage_w=STAGE_W, co
             c.region_row(lay["name_x"], plan["row_ys"][rowi], 54, lay["x0"], lay["wavail"]); rowi += 1; reg = None
         c.prepare(events, dict(cell=cell_fn), reg)
         c.finalize()
-        if getattr(c, "crowded", False):   # D-012（F3）：橢圓也排不開 → 記錄，autoanim 寫入 warnings.json（type=layout_overlap）
+        if getattr(c, "crowded", False):   # 橢圓也排不開 → 記錄，autoanim 寫入 warnings.json（type=layout_overlap）
             plan.setdefault("geo_warnings", []).append(dict(variables=list(c.vars), now=f"圖 {getattr(c, 'var', '')} 的 {getattr(c, 'N', '?')} 個節點（直徑 {getattr(c, 'd', '?')}）在可用區域內外框仍會重疊"))
     return els, dict(ytop=ytop, lay=lay, compact=compact, narrow=narrow, stage_w=stage_w)
 

@@ -1,8 +1,8 @@
-"""introlib.py（CPE-004）：narrate.py extra_scenes 的「新式場景」獨立驗證器（不渲染，純資料檢查）。
+"""introlib.py：narrate.py extra_scenes 的「新式場景」獨立驗證器（不渲染，純資料檢查）。
 
 新式 extra scene（narration.json 的 extra_scenes[i]）：
   {"after": "" | 基礎場景id, "id": "x1", "title": "題目說明",
-   "layout": "concept" | "wide" | "split2" | "fullcode",   # split2（D-020 E2）：左程式（22px、≤58 字元不截）右動畫窗 1020×800；   # fullcode（D-020）：片尾整份程式雙欄（容量 50 行＝每欄 25 列、每行 ≤58 字元，由 narrate.py 檢查）；省略＝沿用舊行為（舊式場景：沿用 base 版面、無 ops）
+   "layout": "concept" | "wide" | "split2" | "fullcode",   # split2：左程式（22px、≤58 字元不截）右動畫窗 1020×800；   # fullcode：片尾整份程式雙欄（容量 50 行＝每欄 25 列、每行 ≤58 字元，由 narrate.py 檢查）；省略＝沿用舊行為（舊式場景：沿用 base 版面、無 ops）
    "focus": "anim" | "code" | "both",       # 預設 anim
    "no_code": true|false,                   # 預設：layout==concept → true（整場不出現程式碼）
    "allow_overlap": [["intro_a","intro_b"]],# 允許重疊的元素對（例如卡片與其底框）
@@ -22,8 +22,8 @@
 from itertools import combinations
 
 PREFIX = "intro_"
-LAYOUTS = ("concept", "wide", "split2")   # split2（D-020 E2）：左程式右動畫；右窗 1020×800，程式面板恆可見（no_code 預設 false，focus 預設 both）
-FULLCODE = "fullcode"            # D-020 E1：整份程式雙欄一次秀出的場景（無動畫舞台、不顯示 cap；不能有 ops；no_code 恆為 false）
+LAYOUTS = ("concept", "wide", "split2")   # split2：左程式右動畫；右窗 1020×800，程式面板恆可見（no_code 預設 false，focus 預設 both）
+FULLCODE = "fullcode"            # 整份程式雙欄一次秀出的場景（無動畫舞台、不顯示 cap；不能有 ops；no_code 恆為 false）
 FOCUSES = ("anim", "code", "both")
 COLORS = ("neutral", "yellow", "green", "gray", "red")
 SHAPES = ("rect", "circle", "line")
@@ -170,7 +170,7 @@ def _verify_scene(R, sc, spec, si, scenes, state, owner, base_ids, min_font, fir
     R.check(sc.get("layout") == spec["layout"] and spec["layout"] in LAYOUTS + (FULLCODE,), "LAYOUT", sid, f"layout={spec['layout']!r} 不合法（只支援 {LAYOUTS + (FULLCODE,)}；split／code 屬於程式碼段）")
     R.check(spec["focus"] in FOCUSES, "FOCUS", sid, f"focus={spec['focus']!r} 不在 {FOCUSES}")
     if spec["layout"] == FULLCODE:
-        # D-020 E1：fullcode 沒有動畫舞台——不能帶 ops、不能設 no_code；程式面板由渲染器強制顯示（不受 revealAll 影響）
+        # fullcode 沒有動畫舞台——不能帶 ops、不能設 no_code；程式面板由渲染器強制顯示（不受 revealAll 影響）
         R.check(not spec["no_code"], "FULLCODE", sid, "fullcode 場景不能 no_code（它就是整份程式）")
         for c in sc["cues"]:
             R.check(not c.get("ops"), "FULLCODE", f"{sid}/{c['id']}", "fullcode 場景的 cue 不得帶 ops（沒有動畫舞台）")
@@ -218,8 +218,8 @@ def _verify_scene(R, sc, spec, si, scenes, state, owner, base_ids, min_font, fir
                     f"元素 {eid} 的淡出必須在場內最後一個 cue 且 at≥{FADE_AT_MIN}（目前在第 {ci + 1}/{last_ci + 1} 個 cue、at={at}）")
 
 
-# ── D-020 E1：fullcode 場景對程式碼與停留時間的檢查（narrate.py 呼叫）──
-# 容量依幾何計算（不寫死 40）：每欄 floor((面板底上限 975 − y0 140 − 2×pad 4)/行高 33)=25 列，兩欄 50 行；與 timeline.ts／stagefit.FULLCODE 相同（tests_d020 對拍）
+# ── fullcode 場景對程式碼與停留時間的檢查（narrate.py 呼叫）──
+# 容量依幾何計算（不寫死 40）：每欄 floor((面板底上限 975 − y0 140 − 2×pad 4)/行高 33)=25 列，兩欄 50 行；與 timeline.ts／stagefit.FULLCODE 相同（離線測試對拍）
 FULL_MAX_LINES, FULL_MAX_COLS, FULL_MIN_DWELL = 2 * ((975 - 140 - 2 * 4) // 33), 58, 15.0
 CPS, LEAD, PAUSE, SCENE_GAP = 4.3, 0.25, 0.4, 0.5      # 與 scripts/story-build.mjs 的估算常數相同
 
@@ -240,17 +240,17 @@ def check_fullcode(code, scene, tab=4):
         errs.append(f"fullcode[{scene['id']}] 程式 {len(lines)} 行 > 容量 {FULL_MAX_LINES}：整份程式放不進雙欄（需精簡或分段）")
     long_ = [(i + 1, len(l.expandtabs(tab))) for i, l in enumerate(lines) if len(l.expandtabs(tab)) > FULL_MAX_COLS]
     if long_:
-        errs.append(f"fullcode[{scene['id']}] {len(long_)} 行超過 {FULL_MAX_COLS} 字元（行:字元數 {long_[:8]}{'…' if len(long_) > 8 else ''}）：24px 雙欄會被截斷；請先排版成每行 ≤{FULL_MAX_COLS}（D2）")
+        errs.append(f"fullcode[{scene['id']}] {len(long_)} 行超過 {FULL_MAX_COLS} 字元（行:字元數 {long_[:8]}{'…' if len(long_) > 8 else ''}）：24px 雙欄會被截斷；請先排版成每行 ≤{FULL_MAX_COLS}")
     dwell = sum(_speak_len(c.get("say") or c["text"]) / CPS + LEAD + c.get("pauseAfter", PAUSE) for c in scene["cues"]) + SCENE_GAP
     if dwell < FULL_MIN_DWELL:
-        warns.append(f"fullcode[{scene['id']}] 估計停留 {dwell:.1f}s < {FULL_MIN_DWELL:.0f}s（F2 建議 ≥15 秒；請加長總結旁白或 pauseAfter）")
+        warns.append(f"fullcode[{scene['id']}] 估計停留 {dwell:.1f}s < {FULL_MIN_DWELL:.0f}s（建議 ≥15 秒；請加長總結旁白或 pauseAfter）")
     for c in scene["cues"]:
         if c.get("cap"): warns.append(f"fullcode[{scene['id']}/{c['id']}] 帶了 cap，但 fullcode 不顯示 cap（會被忽略）")
     return errs, warns
 
 
-# ── D-020 E2：split2 對程式碼的檢查（narrate.py 呼叫；整份程式只檢查一次）──
-SPLIT2_MAX_COLS = 58      # 面板內可用 775.6px ≥ 58×13.2（字級 22、每字 0.6em）＝765.6px；與 timeline.ts SPLIT2／stagefit.SPLIT2 相同（tests_d020 對拍）
+# ── split2 對程式碼的檢查（narrate.py 呼叫；整份程式只檢查一次）──
+SPLIT2_MAX_COLS = 58      # 面板內可用 775.6px ≥ 58×13.2（字級 22、每字 0.6em）＝765.6px；與 timeline.ts SPLIT2／stagefit.SPLIT2 相同（離線測試對拍）
 
 
 def check_split2(code, scene_ids, tab=4):
@@ -258,4 +258,4 @@ def check_split2(code, scene_ids, tab=4):
     lines = code.rstrip().split("\n") if code.strip() else []
     long_ = [(i + 1, len(l.expandtabs(tab))) for i, l in enumerate(lines) if len(l.expandtabs(tab)) > SPLIT2_MAX_COLS]
     if not long_: return []
-    return [f"split2[{','.join(scene_ids)}] {len(long_)} 行超過 {SPLIT2_MAX_COLS} 字元（行:字元數 {long_[:8]}{'…' if len(long_) > 8 else ''}）：22px 程式面板（820 寬）會被截斷；請先排版成每行 ≤{SPLIT2_MAX_COLS}（D2）"]
+    return [f"split2[{','.join(scene_ids)}] {len(long_)} 行超過 {SPLIT2_MAX_COLS} 字元（行:字元數 {long_[:8]}{'…' if len(long_) > 8 else ''}）：22px 程式面板（820 寬）會被截斷；請先排版成每行 ≤{SPLIT2_MAX_COLS}"]

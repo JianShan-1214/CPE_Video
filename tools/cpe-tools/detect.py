@@ -23,7 +23,7 @@ def strip_comments(t):
 def line_of(t, pos): return t.count("\n", 0, pos) + 1
 
 
-# CPE-008：簡單 struct＝只有基本型別欄位（無指標／參考／陣列／預設值／成員函式／建構子／巢狀型別）。
+# 簡單 struct＝只有基本型別欄位（無指標／參考／陣列／預設值／成員函式／建構子／巢狀型別）。
 # autoanim 用同一個判定決定 vector<P> 是否展開成每欄一列（p.s／p.i／p.j），detect 用它決定是否取消 struct 警告。
 BASE_FIELD_RE = re.compile(r"^(int|long|longlong|unsigned|unsignedint|unsignedlong|unsignedlonglong|short|char|bool|double|float|string|size_t|int64_t|uint64_t|int32_t)$")   # 與 autoanim.BASE_RE 同一組型別
 TREEISH_RE = re.compile(r"^(left|right|lc|rc|l|r|ls|rs|lson|rson|parent|par|fa|next|nxt|prev|ch|child|son)$")
@@ -97,7 +97,7 @@ class Det:
         # struct／class／指標
         simple = self.simple_ok()
         for ln, m in self.find(r"\b(struct|class)\s+([A-Za-z_]\w*)\s*\{"):
-            if m.group(1) == "struct" and m.group(2) in simple:   # CPE-008：簡單 struct 的 vector 已逐欄追蹤顯示 → 不警告（supported）
+            if m.group(1) == "struct" and m.group(2) in simple:   # 簡單 struct 的 vector 已逐欄追蹤顯示 → 不警告（supported）
                 self.add("struct_simple", ln, m.group(2), f"vector<{m.group(2)}> 逐欄顯示（{'／'.join(simple[m.group(2)])}）"); continue
             self.add("struct", ln, m.group(2), f"{m.group(1)} {m.group(2)}")
         for ln, m in self.find(r"\b[A-Za-z_]\w*\s*\*\s*([A-Za-z_]\w*)\s*(=|;|,|\))"):
@@ -146,7 +146,7 @@ class Det:
         for ln, m in self.find(r"\b(dp|f|g|memo)\s*\[[^\]]+\](?:\s*\[[^\]]+\])?\s*=\s*(?:max|min)"): self.add("dp_table", ln, m.group(1), "dp 轉移")
 
     def simple_ok(self):
-        """CPE-008：可取消 struct 警告的簡單 struct——欄位全是基本型別、名稱／欄位不像樹或鏈結節點、
+        """可取消 struct 警告的簡單 struct——欄位全是基本型別、名稱／欄位不像樹或鏈結節點、
         原始碼裡這個型別只出現在 vector<P> 與 const P& 參數（沒有單一物件、陣列、pair／map／priority_queue 元素等其他用法），
         且（有 trace 時）畫面確實有它的欄位列（plan.info 有 名.欄位）。其他 struct 照舊警告。"""
         t, res = self.t, {}

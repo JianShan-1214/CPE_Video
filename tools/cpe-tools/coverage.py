@@ -21,7 +21,7 @@ COVERAGE = {
     "pair": dict(name="pair／tuple", status="unsupported", now="含 pair 的變數／容器未被追蹤而不顯示", missing="tracer 支援 pair（顯示成 a,b）", eta="約 0.5 天"),
     "struct": dict(name="struct／class 物件", status="unsupported", now="該類型變數不顯示", missing="tracer 支援 struct 欄位展開＋卡片顯示", eta="約 1.5 天"),
     "struct_simple": dict(name="簡單 struct 的 vector（vector<P>，P 只有基本型別欄位）", status="supported",
-        now="每欄一列（p.s／p.i／p.j）＋索引 p[k] 的 ▲k（CPE-008）", missing="—", eta="—"),
+        now="每欄一列（p.s／p.i／p.j）＋索引 p[k] 的 ▲k", missing="—", eta="—"),
     "pointer": dict(name="指標／new／鏈結串列", status="unsupported", now="指標變數不顯示", missing="tracer 支援指標＋節點鏈結圖", eta="約 2–3 天"),
     "recursion": dict(name="遞迴（呼叫堆疊／遞迴樹）", status="degraded", now="只顯示各次呼叫當下的參數變數（無堆疊、無遞迴樹）", missing="呼叫堆疊或遞迴樹視圖", eta="約 1.5 天"),
     "string": dict(name="字串處理（string、逐字元）", status="partial", now="字元以陣列格逐格顯示；不支援 substr 視窗／匹配標示", missing="字串視窗與匹配指示", eta="約 0.5 天"),

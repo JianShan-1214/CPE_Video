@@ -62,7 +62,7 @@ struct Arrv {
 template <class T>
 Arrv<T> arrv(const std::vector<T>* p, long long n) { return Arrv<T>{p, n}; }
 
-// CPE-008：vector<P>（P 為只有基本型別欄位的簡單 struct）的單一欄位視圖：p.s／p.i／p.j 各成一列
+// vector<P>（P 為只有基本型別欄位的簡單 struct）的單一欄位視圖：p.s／p.i／p.j 各成一列
 template <class V, class F>
 struct Fld {
     const V* p;

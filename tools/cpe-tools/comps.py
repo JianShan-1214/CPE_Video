@@ -152,7 +152,7 @@ class GraphComp(Comp):
             gx, gy = min(gx, 110), min(gy, 90)
             ox = x0 + (x1 - x0 - gx * (W - 1)) / 2; oy = y0 + 30 + d / 2 + (y1 - y0 - 30 - d - gy * (H - 1)) / 2
             for i in range(N): self.pos[i] = (ox + (i % W) * gx, oy + (i // W) * gy)
-            self.crowded = self._box_gap(self.pos, d) < 0   # D-016（F3）：格狀也檢查（原本不檢查、不記錄）
+            self.crowded = self._box_gap(self.pos, d) < 0   # 格狀也檢查（原本不檢查、不記錄）
         elif self.layout[0] == "tree":
             kids, depth = self.layout[1], self.layout[2]
             D = max(depth.values()); leaf = [0]
@@ -168,7 +168,7 @@ class GraphComp(Comp):
             gx = min((x1 - x0 - d) / max(1, nl), 90); gy = min((y1 - y0 - d - 30) / max(1, D), 90)
             ox = x0 + (x1 - x0 - gx * nl) / 2
             for u in range(N): self.pos[u] = (ox + xp[u] * gx, y0 + 30 + d / 2 + depth[u] * gy)
-            # D-016（F3）：樹狀版面外框重疊（路徑圖深度大、星形葉子多…）時，依序試環形、弧長等距橢圓，取外框間隙最大者；仍重疊 → crowded（layout_overlap 警示）
+            # 樹狀版面外框重疊（路徑圖深度大、星形葉子多…）時，依序試環形、弧長等距橢圓，取外框間隙最大者；仍重疊 → crowded（layout_overlap 警示）
             if self._box_gap(self.pos, d) < 0:
                 cands = [("tree", self.pos)]
                 pc = {i: (cx + R * math.cos(-math.pi / 2 + 2 * math.pi * i / N), cy + R * math.sin(-math.pi / 2 + 2 * math.pi * i / N)) for i in range(N)}
@@ -182,7 +182,7 @@ class GraphComp(Comp):
             for i in range(N):
                 ang = -math.pi / 2 + 2 * math.pi * i / N
                 self.pos[i] = (cx + R * math.cos(ang), cy + R * math.sin(ang))
-            # D-012（F3）：節點外框（正方形 d×d）互相重疊時（例如 20 節點：相鄰兩點的 |dx|、|dy| 都只有 29px < d=34），
+            # 節點外框（正方形 d×d）互相重疊時（例如 20 節點：相鄰兩點的 |dx|、|dy| 都只有 29px < d=34），
             # 改排成「弧長等距」的橢圓（水平半徑用滿區域寬 (x1-x0)/2-36，垂直半徑維持 R）；仍擠不下才記錄 self.crowded（由 autoanim 寫入警示）
             self.crowded = False
             if self._box_gap(self.pos, d) < 0:
@@ -360,7 +360,7 @@ class SeqComp(Comp):
         self.K = K
         if self.ctype == "stack":
             x0, y0, x1, y1 = region
-            ch = self.STACK_CH      # CPE-003：堆疊格高 40→44（A1：成片 ≥64px，wide 倍率約 1.5 → 66px；concept 更大）
+            ch = self.STACK_CH      # 堆疊格高 40→44（A1：成片 ≥64px，wide 倍率約 1.5 → 66px；concept 更大）
             self.col = dict(x=x0 + 8, y0=y0, ch=ch, ybase=y1 - 4)
             self.cw = x1 - x0 - 16
             fy = y1 - 4 - K * (ch + 4) - 4          # 外框頂端
@@ -444,9 +444,9 @@ class SlotsComp(Comp):
         self.writes = writes
         self.hide = [res_var] + ([flag_var] if flag_var else [])
 
-    # CPE-003 D-007：槽位卡／槽放大到 68（成片 wide ×~1.4 時 ≥90px），說明文字移到左側欄（不再多占一列），整體高度 158→168
+    # 槽位卡／槽放大到 68（成片 wide ×~1.4 時 ≥90px），說明文字移到左側欄（不再多占一列），整體高度 158→168
     HP, HS, HL, CAPW = 68, 68, 24, 150
-    # D-020 E3 退路（split2 窄版，layoutlib.build_geometry 設 self.narrow）：說明欄 150→110、卡寬上限 150→120；高度 HP/HS 維持 68（完整版 90px 不做）
+    # 退路（split2 窄版，layoutlib.build_geometry 設 self.narrow）：說明欄 150→110、卡寬上限 150→120；高度 HP/HS 維持 68（完整版 90px 不做）
     CAPW_NARROW, WMAX, WMAX_NARROW = 110, 150, 120
     narrow = False
     height = HP + 6 + HS + 2 + HL   # 此元件在舞台頂部需要的高度（autoanim 依此預留，下方陣列往下排）
@@ -619,7 +619,7 @@ class TreeComp(Comp):
         n = max(1, len(allord))
         maxd = max(list(depth.values()) + [0]) + (1 if extra else 0)
         # 依節點數與深度挑最大的節點直徑，使任兩節點外框不重疊（max(|dx|,|dy|) ≥ d+2）
-        wide_region = (x1 - x0) >= 800   # CPE-003：整個動畫區寬都給樹（autoanim.comp_region）時，節點可以更大（A1 節點 ≥64px；退化樹 15 節點仍能 52）
+        wide_region = (x1 - x0) >= 800   # 整個動畫區寬都給樹（autoanim.comp_region）時，節點可以更大（A1 節點 ≥64px；退化樹 15 節點仍能 52）
         for d_ in (52, 42, 36, 32, 28, 26):
             if not wide_region:
                 if d_ == 52 and n > 9: continue
@@ -636,7 +636,7 @@ class TreeComp(Comp):
                 self.pos[u] = (xs + k * colw + self.d / 2, y0 + 24 + self.d / 2 + dd * rowh)
             pts = list(self.pos.values())
             if all(max(abs(a[0] - b[0]), abs(a[1] - b[1])) >= self.d + 2 for i, a in enumerate(pts) for b in pts[i + 1:]): break
-        self.els[f"tl_{self.name}"] = dict(x=x0, y=y0 - 2, w=60, h=26, fs=26, plain=True, text="樹", color="neutral")   # CPE-003：標籤縮小，不再壓到根節點（strict 重疊 0）
+        self.els[f"tl_{self.name}"] = dict(x=x0, y=y0 - 2, w=60, h=26, fs=26, plain=True, text="樹", color="neutral")   # 標籤縮小，不再壓到根節點（strict 重疊 0）
         for u, (px, py) in self.pos.items():
             self.els[f"tn_{u}"] = dict(x=px - self.d / 2, y=py - self.d / 2, w=self.d, h=self.d, fs=26 if self.d >= 50 else (22 if self.d >= 36 else 18), sfs=15, shape="circle", color="neutral")
         self.edge_list = []
@@ -830,7 +830,7 @@ SEQ_CAP = dict(stack=8, queue=12, deque=12, priority_queue=12)   # SeqComp 最�
 
 
 def trunc_note(kind_zh, var, mx, cap):
-    """D-012（F4）：容器同時最大項數超過元件顯示上限 → 一則 notes（detect 會轉成 warnings.json 的 type=truncated，summary 隨之變成「缺元件警示 N 項」）"""
+    """容器同時最大項數超過元件顯示上限 → 一則 notes（detect 會轉成 warnings.json 的 type=truncated，summary 隨之變成「缺元件警示 N 項」）"""
     return f"{kind_zh} {var} 同時最多 {mx} 項，只顯示 {cap} 項（超過的卡片不畫、不驗）"
 
 

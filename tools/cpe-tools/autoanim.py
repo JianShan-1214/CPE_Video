@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "backend"))
 sys.path.insert(0, str(Path(__file__).parent))
 import detect as detect_mod
-import stagefit   # CPE-003：舞台自適應（story.stageFit）與 stage_fit 警示
+import stagefit   # 舞台自適應（story.stageFit）與 stage_fit 警示
 import comps as comps_mod
 from verifylib import check_key, got_of
 import tree_sitter_cpp
@@ -26,7 +26,7 @@ CPP = Language(tree_sitter_cpp.language())
 BASE_RE = re.compile(r"^(int|long|longlong|unsigned|unsignedint|unsignedlong|unsignedlonglong|short|char|bool|double|float|string|std::string|size_t|int64_t|uint64_t|int32_t)$")
 SIZE_RE = re.compile(r"^[A-Za-z0-9_+\-\* ]+$")
 LOOPS = ("for_statement", "while_statement", "do_statement", "for_range_loop")
-# CPE-008：簡單 struct（只有基本型別欄位，見 detect.simple_structs）名稱 → 欄位名清單；instrument() 依原始碼設定。
+# 簡單 struct（只有基本型別欄位，見 detect.simple_structs）名稱 → 欄位名清單；instrument() 依原始碼設定。
 # 空（程式裡沒有這種 struct）＝與以前逐值相同；vector<P> 會展開成每欄一列 p.s／p.i／p.j（kind=seq，插樁用 CPE_FLD）
 STRUCTS = {}
 SPLIT2_STRUCT_W, SPLIT2_STRUCT_H = 940, 580   # 940×580 的內容框在 split2 右窗（1020×800）fit 倍率 = min(1020/940, 800/580) ≈ 1.085，高度不再擠壓格子；580＝overlapcheck 出界上限（585）與 layout 既有的 580 延伸高
@@ -74,7 +74,7 @@ def type_kind(t):
         if BASE_RE.match(inner): return "seq"
         mm = re.match(r"^vector<(.+)>$", inner)
         if m.group(1) == "vector" and mm and BASE_RE.match(mm.group(1)): return "seq2"
-        if m.group(1) == "vector" and inner in STRUCTS: return "sseq"   # CPE-008：vector<P>（P 為簡單 struct）
+        if m.group(1) == "vector" and inner in STRUCTS: return "sseq"   # vector<P>（P 為簡單 struct）
     return None
 
 
@@ -95,7 +95,7 @@ def parse_declarator(d, src, tkind, is_str, vec_elem=False):
                 return None
             if tkind == "base": return Var(name, "str" if is_str else "scalar", name)
             if tkind in ("seq", "seq2", "map", "set"): return Var(name, tkind, name)
-            if tkind == "sseq": return Var(name, "sseq", name)   # CPE-008：decl_vars 再展開成每欄一個 seq
+            if tkind == "sseq": return Var(name, "sseq", name)   # decl_vars 再展開成每欄一個 seq
             return None
         if t == "function_declarator" and tkind in ("seq", "seq2", "base", "map", "set", "sseq") and not sizes:
             inner = d.child_by_field_name("declarator")
@@ -129,7 +129,7 @@ def decl_vars(node, src, aliases):
     out = []
     for c in node.children_by_field_name("declarator"):
         v = parse_declarator(c, src, tk, is_str, vec_elem)
-        if v and v.kind == "sseq":   # CPE-008：vector<P> p → p.s／p.i／p.j（每欄一列，CPE_FLD 取欄位）
+        if v and v.kind == "sseq":   # vector<P> p → p.s／p.i／p.j（每欄一列，CPE_FLD 取欄位）
             out += [Var(f"{v.name}.{f}", "seq", f"CPE_FLD({v.name}, {f})") for f in STRUCTS[t[7:-1]]]
         elif v: out.append(v)
     return out
@@ -199,7 +199,7 @@ def instrument(source_text, drop_nonliteral=False):
     parser = Parser(CPP)
     tree = parser.parse(src)
     aliases = find_aliases(source_text)
-    STRUCTS.clear(); STRUCTS.update(detect_mod.simple_structs(source_text))   # CPE-008（與 detect 的 struct 警告共用同一個判定）
+    STRUCTS.clear(); STRUCTS.update(detect_mod.simple_structs(source_text))   # 與 detect 的 struct 警告共用同一個判定
     edits = []   # (pos, seq, text)
     seq = [0]
     points = {}  # id -> dict(line0, line1, names, start_byte, kind)
@@ -281,7 +281,7 @@ def find_uninit_locals(tree, src, aliases):
 
 
 def loop_scalars(tree, src, aliases):
-    """CPE-008 --show-born：main 裡、宣告在迴圈內（迴圈本體或 for 初始化）的基本型別純量名"""
+    """--show-born：main 裡、宣告在迴圈內（迴圈本體或 for 初始化）的基本型別純量名"""
     names = set()
     def walk(n, in_main, in_loop):
         if n.type == "function_definition":
@@ -354,7 +354,7 @@ def is_empty(v): return v in (0, "", False, None)
 
 
 def plan_display(events, points, ptr_map, max1=16, max2r=8, max2c=10, exclude=(), born=()):
-    """born（CPE-008 --show-born）：在 main 迴圈內宣告、出生過但值從未改變的純量也顯示；預設空＝與以前相同"""
+    """born（--show-born）：在 main 迴圈內宣告、出生過但值從未改變的純量也顯示；預設空＝與以前相同"""
     kinds, dims = {}, {}
     for m in points.values():
         kinds.update(m["kinds"]); dims.update(m["dims"])
@@ -420,7 +420,7 @@ def plan_display(events, points, ptr_map, max1=16, max2r=8, max2c=10, exclude=()
     ptrs = {}
     marker_vars = set()
     for a in arr1:
-        # CPE-008：struct 欄位列 p.s 用 p[k] 的索引（ptr_map 以陣列名 p 記錄）
+        # struct 欄位列 p.s 用 p[k] 的索引（ptr_map 以陣列名 p 記錄）
         for p in sorted(ptr_map.get(a, ()) if "." not in a else ptr_map.get(a.split(".")[0], ())):
             if p in info and info[p]["kind"] == "scalar" and p not in arr1:
                 ptrs.setdefault(a, []).append(p); marker_vars.add(p)
@@ -432,7 +432,7 @@ def plan_display(events, points, ptr_map, max1=16, max2r=8, max2c=10, exclude=()
     return dict(info=info, chips=chips, arrays=arrays, ptrs=ptrs, marker_vars=marker_vars, notes=notes, changed=changed)
 
 
-from layoutlib import layout, build_geometry, marker_els, make_cell_fn, cell_text   # CPE-003：版面幾何抽成純函式模組（可離線測試）
+from layoutlib import layout, build_geometry, marker_els, make_cell_fn, cell_text   # 版面幾何抽成純函式模組（可離線測試）
 
 
 def board_state(plan, state):
@@ -507,7 +507,7 @@ def phrase(name, old, new, kind):
 
 
 def narrow_w(args):
-    """D-020 E3：虛擬舞台寬。--stage-w 明確指定優先；否則 --layout split2 → 1000（只對有頂部槽位列的 story 生效，layoutlib.is_narrow），其餘 1200（舊行為）"""
+    """虛擬舞台寬。--stage-w 明確指定優先；否則 --layout split2 → 1000（只對有頂部槽位列的 story 生效，layoutlib.is_narrow），其餘 1200（舊行為）"""
     w = getattr(args, "stage_w", None)
     if w: return w
     return 1000 if getattr(args, "layout", "split") == "split2" else 1200
@@ -515,7 +515,7 @@ def narrow_w(args):
 
 def generate(folder, args, eq, points, tree, src, aliases, events, src_text):
     ptr_map = index_pointers(tree, src)
-    born = loop_scalars(tree, src, aliases) if getattr(args, "show_born", False) else set()   # CPE-008 --show-born
+    born = loop_scalars(tree, src, aliases) if getattr(args, "show_born", False) else set()   # --show-born
     plan = plan_display(events, points, ptr_map, born=born)
     uninit = find_uninit_locals(tree, src, aliases)
     kinds = {}
@@ -535,13 +535,13 @@ def generate(folder, args, eq, points, tree, src, aliases, events, src_text):
             if k in uninit and plan["info"].get(k, {}).get("kind") == "scalar" and isinstance(v, (int, float)) and not isinstance(v, bool) and v != 0:
                 plan["garbage"][k] = v
     info = plan["info"]
-    # CPE-008：split2 且有 struct 欄位列（p.s／p.i／p.j，常 10 格）時，內容寬限 940 → fit 倍率 ≥1.08，▲指標／chip 副標 24px 上畫面仍 ≥26px；其他情形不變
+    # split2 且有 struct 欄位列（p.s／p.i／p.j，常 10 格）時，內容寬限 940 → fit 倍率 ≥1.08，▲指標／chip 副標 24px 上畫面仍 ≥26px；其他情形不變
     cw_ = SPLIT2_STRUCT_W if getattr(args, "layout", "split") == "split2" and any("." in a for a in plan["arrays"]) else None
     if cw_:   # 格子變窄：記下各一維陣列全片最寬的格文字（em），layoutlib 據此降字級，避免 4 位數溢出格子
         for a in plan["arrays"]:
             if info[a]["kind"] == "arr2": continue
             info[a]["maxgw"] = max([stagefit.glyph_width(cell_text(x), 1) for e in events if a in e["values"] for x in list(e["values"][a])[:info[a]["n"]]] or [0])
-    els, geo = build_geometry(comps, plan, events[0]["state"] if events else {}, make_cell_fn(info), events, stage_w=narrow_w(args), content_w=cw_, content_h=SPLIT2_STRUCT_H if cw_ else None)   # layoutlib（CPE-003：與離線重放測試共用）
+    els, geo = build_geometry(comps, plan, events[0]["state"] if events else {}, make_cell_fn(info), events, stage_w=narrow_w(args), content_w=cw_, content_h=SPLIT2_STRUCT_H if cw_ else None)   # layoutlib（與離線重放測試共用）
     ytop, lay = geo["ytop"], geo["lay"]
     comp_vars = set(v for c in comps for v in c.vars)
     shown = set(plan["chips"]) | set(plan["arrays"]) | plan["marker_vars"] | comp_vars
@@ -783,11 +783,11 @@ async def amain():
     ap = argparse.ArgumentParser()
     ap.add_argument("folder"); ap.add_argument("--cpp", required=True); ap.add_argument("--stdin", required=True)
     ap.add_argument("--expect"); ap.add_argument("--title", default=""); ap.add_argument("--no-comps", action="store_true", dest="no_comps"); ap.add_argument("--disable", default="")
-    ap.add_argument("--out", default=str(Path(__file__).resolve().parents[2] / "public")); ap.add_argument("--layout", default="split", choices=["split", "split2", "concept", "wide"], help="split＝左程式右動畫（預設）；split2＝D-020 E2：左程式面板 820×852（字級 22、單行 ≤58 字元不截、約 22 行）＋右窗 1020×800（A1 判全額）；fullcode 只用於 narrate 的片尾場景，不是整片版面；concept＝1.45 倍舞台＋小程式列（舞台限高 460）；wide＝1.2 倍舞台（可到 580 高）＋小程式列（手工版風格）")
-    ap.add_argument("--stage-fit", default="auto", choices=["auto", "off"], dest="stage_fit", help="CPE-003：auto（預設）＝story 加 stageFit=auto（動畫區依內容自適應放大）並把最小可讀尺寸警示（type=stage_fit）寫入 warnings.json；off＝關閉，行為與以前相同")
-    ap.add_argument("--stage-w", type=int, default=None, dest="stage_w", help="D-020 E3：虛擬舞台寬（<1200 時，有頂部槽位列的 story 啟用窄版：槽卡寬≤120、說明欄 110、陣列不左右成對）；預設：--layout split2→1000，其餘 1200（逐值不變）")
-    ap.add_argument("--show-born", action="store_true", dest="show_born", help="CPE-008：main 迴圈內宣告、設過一次就不再改的純量（如找到解那條路徑上的 d／c／t／k）也顯示（chip 或 ▲指標）；預設關閉＝與以前逐值相同")
-    ap.add_argument("--layout-rev", type=int, default=2, choices=[1, 2], dest="layout_rev", help="D-020 E4：2（預設，新產生的 story）＝story 標 layoutRev:2，字幕下移到 top=1003，與 wide 程式列零重疊；1＝不標（與以前逐值相同）")
+    ap.add_argument("--out", default=str(Path(__file__).resolve().parents[2] / "public")); ap.add_argument("--layout", default="split", choices=["split", "split2", "concept", "wide"], help="split＝左程式右動畫（預設）；split2＝左程式面板 820×852（字級 22、單行 ≤58 字元不截、約 22 行）＋右窗 1020×800（A1 判全額）；fullcode 只用於 narrate 的片尾場景，不是整片版面；concept＝1.45 倍舞台＋小程式列（舞台限高 460）；wide＝1.2 倍舞台（可到 580 高）＋小程式列（手工版風格）")
+    ap.add_argument("--stage-fit", default="auto", choices=["auto", "off"], dest="stage_fit", help="auto（預設）＝story 加 stageFit=auto（動畫區依內容自適應放大）並把最小可讀尺寸警示（type=stage_fit）寫入 warnings.json；off＝關閉，行為與以前相同")
+    ap.add_argument("--stage-w", type=int, default=None, dest="stage_w", help="虛擬舞台寬（<1200 時，有頂部槽位列的 story 啟用窄版：槽卡寬≤120、說明欄 110、陣列不左右成對）；預設：--layout split2→1000，其餘 1200（逐值不變）")
+    ap.add_argument("--show-born", action="store_true", dest="show_born", help="main 迴圈內宣告、設過一次就不再改的純量（如找到解那條路徑上的 d／c／t／k）也顯示（chip 或 ▲指標）；預設關閉＝與以前逐值相同")
+    ap.add_argument("--layout-rev", type=int, default=2, choices=[1, 2], dest="layout_rev", help="2（預設，新產生的 story）＝story 標 layoutRev:2，字幕下移到 top=1003，與 wide 程式列零重疊；1＝不標（與以前逐值相同）")
     args = ap.parse_args()
     src_text = Path(args.cpp).read_text()
     stdin = Path(args.stdin).read_text()
@@ -821,7 +821,7 @@ async def amain():
     for n in plan["notes"]: print("  限制:", n)
     for f in res["fails"][:8]: print("  FAIL", f)
     ws, algos = detect_mod.detect(src_text, events, dict(plan, kinds={k: v["kind"] for k, v in plan["info"].items()}), points, used=plan.get("components", ()))
-    ws = ws + stagefit.geo_warnings(plan)    # CPE-003 D-012：排版時偵測到的外框重疊（F3 超限）
+    ws = ws + stagefit.geo_warnings(plan)    # 排版時偵測到的外框重疊（超限）
     (d / "warnings.json").write_text(json.dumps(dict(summary=stagefit.summary_of(ws), algorithms=[a for a, _ in algos], components_used=sorted(plan.get("components", ())), warnings=ws), ensure_ascii=False, indent=1))
     nfit = stagefit.write_outputs_warnings(d, story, args.stage_fit)    # type=stage_fit 併入 warnings.json（可重跑；off 時移除既有 stage_fit）
     if args.stage_fit == "auto": print(f"  舞台自適應 stageFit=auto：最小可讀尺寸警示 {nfit} 項（type=stage_fit；明細 pixel_table.py {d}）")
